@@ -1,0 +1,14 @@
+process.env.DATABASE_URL ??= "postgresql://user:pass@localhost:5432/beatmakerz_test";
+process.env.JWT_SECRET ??= "test-access";
+process.env.JWT_REFRESH_SECRET ??= "test-refresh";
+process.env.JWT_ACCESS_TTL_SECONDS ??= "900";
+process.env.JWT_REFRESH_TTL_SECONDS ??= "2592000";
+process.env.STRIPE_KEY ??= "sk_test";
+process.env.STRIPE_WEBHOOK_SECRET ??= "whsec_test";
+process.env.STORAGE_ENDPOINT ??= "http://localhost";
+process.env.STORAGE_REGION ??= "test";
+process.env.STORAGE_BUCKET ??= "test-bucket";
+process.env.STORAGE_ACCESS_KEY ??= "test-access";
+process.env.STORAGE_SECRET_KEY ??= "test-secret";
+process.env.EMAIL_API_KEY ??= "re_test";
+process.env.FRONTEND_URL ??= "http://localhost:3000";
