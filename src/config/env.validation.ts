@@ -13,7 +13,7 @@ class EnvironmentVariables {
   NODE_ENV?: NodeEnv = NodeEnv.Development;
 
   @IsString()
-  DATABASE_URL!: string;
+  MONGO_URI!: string;
 
   @IsString()
   JWT_SECRET!: string;

@@ -78,12 +78,14 @@ export class CheckoutService {
     }));
 
     const frontendUrl = this.configService.get<string>('frontendUrl');
+    const successUrl = `${frontendUrl}/web/checkout/success?session_id={CHECKOUT_SESSION_ID}`;
+    const cancelUrl = `${frontendUrl}/web/checkout/cancel`;
     const session = await this.stripeService.getClient().checkout.sessions.create({
       mode: 'payment',
       customer_email: user.email,
       line_items: lineItems,
-      success_url: `${frontendUrl}/checkout/success?session_id={CHECKOUT_SESSION_ID}`,
-      cancel_url: `${frontendUrl}/checkout/cancel`,
+      success_url: successUrl,
+      cancel_url: cancelUrl,
       metadata: {
         orderId: order.id,
         userId,
@@ -101,6 +103,6 @@ export class CheckoutService {
       data: { stripeCheckoutSessionId: session.id },
     });
 
-    return { stripeUrl: session.url, orderId: order.id };
+    return { url: session.url, orderId: order.id };
   }
 }

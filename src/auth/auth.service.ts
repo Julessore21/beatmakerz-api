@@ -1,22 +1,25 @@
 import { BadRequestException, Injectable, UnauthorizedException } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { JwtService } from "@nestjs/jwt";
-import { User, UserRole } from "@prisma/client";
 import * as argon2 from "argon2";
+import { InjectModel } from "@nestjs/mongoose";
+import { Model } from "mongoose";
 import { UsersService } from "../users/users.service";
-import { PrismaService } from "../prisma/prisma.service";
 import { RegisterDto } from "./dto/register.dto";
 import { LoginDto } from "./dto/login.dto";
 import { JwtPayload } from "./interfaces/jwt-payload.interface";
 import { AuthResponseDto, AuthTokensDto } from "./dto/tokens.dto";
+import { Cart, CartDocument } from "../database/schemas/cart.schema";
+import { User, UserDocument, UserRoleEnum } from "../database/schemas/user.schema";
 
 @Injectable()
 export class AuthService {
   constructor(
     private readonly usersService: UsersService,
-    private readonly prisma: PrismaService,
     private readonly jwtService: JwtService,
     private readonly configService: ConfigService,
+    @InjectModel(User.name) private readonly userModel: Model<UserDocument>,
+    @InjectModel(Cart.name) private readonly cartModel: Model<CartDocument>,
   ) {}
 
   async register(dto: RegisterDto): Promise<AuthResponseDto> {
@@ -26,28 +29,18 @@ export class AuthService {
     }
 
     const passwordHash = await argon2.hash(dto.password);
-    const user = await this.prisma.user.create({
-      data: {
-        email: dto.email,
-        passwordHash,
-        displayName: dto.displayName,
-        avatarUrl: dto.avatarUrl,
-        role: dto.role ?? UserRole.buyer,
-        artist:
-          dto.role === UserRole.seller
-            ? {
-                create: {
-                  name: dto.artistName ?? dto.displayName,
-                  bio: dto.artistBio,
-                },
-              }
-            : undefined,
-        cart: { create: {} },
-      },
+    const user = await this.userModel.create({
+      email: dto.email,
+      passwordHash,
+      displayName: dto.displayName,
+      avatarUrl: dto.avatarUrl,
+      role: dto.role ?? UserRoleEnum.buyer,
     });
 
-    const tokens = await this.generateAndPersistTokens(user);
-    return this.buildAuthResponse(user, tokens);
+    await this.cartModel.create({ userId: user._id });
+
+    const tokens = await this.generateAndPersistTokens(user.toObject());
+    return this.buildAuthResponse(user.toObject(), tokens);
   }
 
   async login(dto: LoginDto): Promise<AuthResponseDto> {
@@ -84,9 +77,9 @@ export class AuthService {
     await this.usersService.updateRefreshTokenHash(userId, null);
   }
 
-  private async generateAndPersistTokens(user: User): Promise<AuthTokensDto> {
+  private async generateAndPersistTokens(user: Pick<User, '_id' | 'email' | 'role'>): Promise<AuthTokensDto> {
     const payload: JwtPayload = {
-      sub: user.id,
+      sub: user._id,
       email: user.email,
       role: user.role,
     };
@@ -111,15 +104,15 @@ export class AuthService {
     });
 
     const refreshHash = await argon2.hash(refreshToken);
-    await this.usersService.updateRefreshTokenHash(user.id, refreshHash);
+    await this.usersService.updateRefreshTokenHash(user._id, refreshHash);
 
     return { accessToken, refreshToken };
   }
 
-  private buildAuthResponse(user: User, tokens: AuthTokensDto): AuthResponseDto {
+  private buildAuthResponse(user: Pick<User, '_id' | 'email' | 'displayName' | 'role'>, tokens: AuthTokensDto): AuthResponseDto {
     return {
       tokens,
-      userId: user.id,
+      userId: user._id,
       email: user.email,
       displayName: user.displayName,
       role: user.role,

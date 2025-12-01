@@ -2,6 +2,7 @@ export default () => ({
   env: process.env.NODE_ENV ?? 'development',
   port: Number(process.env.PORT ?? 3000),
   frontendUrl: process.env.FRONTEND_URL,
+  mongoUri: process.env.MONGO_URI,
   jwt: {
     accessSecret: process.env.JWT_SECRET,
     refreshSecret: process.env.JWT_REFRESH_SECRET,

@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { UserRole } from '@prisma/client';
+import { UserRoleEnum } from '../../database/schemas/user.schema';
 
 export class AuthTokensDto {
   @ApiProperty()
@@ -22,6 +22,6 @@ export class AuthResponseDto {
   @ApiProperty()
   displayName!: string;
 
-  @ApiProperty({ enum: UserRole })
-  role!: UserRole;
+  @ApiProperty({ enum: UserRoleEnum })
+  role!: UserRoleEnum;
 }

@@ -1,28 +1,22 @@
-import { Controller, Get, Param, UseGuards } from '@nestjs/common';
-import { ApiTags } from '@nestjs/swagger';
-import { OrdersService } from './orders.service';
-import { JwtAccessGuard } from '../common/guards/jwt-access.guard';
-import { CurrentUser } from '../common/decorators/current-user.decorator';
-import type { RequestUser } from '../common/decorators/current-user.decorator';
+import { Controller, Get, Post, UseGuards } from "@nestjs/common";
+import { ApiTags } from "@nestjs/swagger";
+import { JwtAccessGuard } from "../common/guards/jwt-access.guard";
+import { CurrentUser, type RequestUser } from "../common/decorators/current-user.decorator";
+import { OrdersService } from "./orders.service";
 
 @ApiTags('orders')
-@Controller('me')
+@Controller('me/orders')
 @UseGuards(JwtAccessGuard)
 export class OrdersController {
   constructor(private readonly ordersService: OrdersService) {}
 
-  @Get('orders')
+  @Get()
   list(@CurrentUser() user: RequestUser) {
-    return this.ordersService.listOrders(user.userId);
+    return this.ordersService.list(user.userId);
   }
 
-  @Get('orders/:id')
-  get(@CurrentUser() user: RequestUser, @Param('id') id: string) {
-    return this.ordersService.getOrder(user.userId, id);
-  }
-
-  @Get('downloads/:orderItemId')
-  download(@CurrentUser() user: RequestUser, @Param('orderItemId') orderItemId: string) {
-    return this.ordersService.getDownloadLink(user.userId, orderItemId);
+  @Post()
+  createFromCart(@CurrentUser() user: RequestUser) {
+    return this.ordersService.createFromCart(user.userId);
   }
 }

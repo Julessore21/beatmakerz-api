@@ -1,8 +1,17 @@
-import { LicenseType, PriceOverride } from '@prisma/client';
+export interface LicensePriceShape {
+  id: string;
+  priceCents: number;
+}
+
+export interface PriceOverrideShape {
+  beatId: string;
+  licenseTypeId: string;
+  priceCents: number;
+}
 
 export function resolveLicensePrice(
-  license: LicenseType,
-  overrides: PriceOverride[],
+  license: LicensePriceShape,
+  overrides: PriceOverrideShape[],
   beatId?: string,
 ): number {
   if (!beatId) {

@@ -7,21 +7,17 @@ import { AppController } from "./app.controller";
 import { AppService } from "./app.service";
 import configuration from "./config/configuration";
 import { validate } from "./config/env.validation";
-import { PrismaModule } from "./prisma/prisma.module";
 import { UsersModule } from "./users/users.module";
 import { AuthModule } from "./auth/auth.module";
-import { ArtistsModule } from "./artists/artists.module";
 import { BeatsModule } from "./beats/beats.module";
-import { FilesModule } from "./files/files.module";
 import { CartModule } from "./cart/cart.module";
-import { OrdersModule } from "./orders/orders.module";
-import { CheckoutModule } from "./checkout/checkout.module";
-import { WebhooksModule } from "./webhooks/webhooks.module";
-import { AdminModule } from "./admin/admin.module";
-import { EmailsModule } from "./emails/emails.module";
-import { DocumentsModule } from "./documents/documents.module";
-import { PaymentsModule } from "./payments/payments.module";
 import { RolesGuard } from "./common/guards/roles.guard";
+import { DatabaseModule } from "./database/database.module";
+import { FavoritesModule } from "./favorites/favorites.module";
+import { SettingsModule } from "./settings/settings.module";
+import { NotificationsModule } from "./notifications/notifications.module";
+import { ArtistsModule } from "./artists/artists.module";
+import { OrdersModule } from "./orders/orders.module";
 
 @Module({
   imports: [
@@ -50,20 +46,16 @@ import { RolesGuard } from "./common/guards/roles.guard";
         limit: 100,
       },
     ]),
-    PrismaModule,
+    DatabaseModule,
     UsersModule,
     AuthModule,
-    ArtistsModule,
     BeatsModule,
-    FilesModule,
     CartModule,
+    FavoritesModule,
+    SettingsModule,
+    NotificationsModule,
+    ArtistsModule,
     OrdersModule,
-    CheckoutModule,
-    WebhooksModule,
-    AdminModule,
-    EmailsModule,
-    DocumentsModule,
-    PaymentsModule,
   ],
   controllers: [AppController],
   providers: [

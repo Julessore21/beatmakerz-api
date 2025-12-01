@@ -1,6 +1,6 @@
 import { Transform } from 'class-transformer';
 import { IsEmail, IsOptional, IsString, MaxLength, MinLength } from 'class-validator';
-import { UserRole } from '@prisma/client';
+import { UserRoleEnum } from '../../database/schemas/user.schema';
 
 export class RegisterDto {
   @IsEmail()
@@ -18,7 +18,7 @@ export class RegisterDto {
   displayName!: string;
 
   @IsOptional()
-  role?: UserRole;
+  role?: UserRoleEnum;
 
   @IsOptional()
   @IsString()

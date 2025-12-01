@@ -1,29 +1,26 @@
-import { Injectable } from '@nestjs/common';
-import { Prisma, User } from '@prisma/client';
-import { PrismaService } from '../prisma/prisma.service';
-
-interface CreateUserInput extends Prisma.UserCreateInput {}
+import { Injectable } from "@nestjs/common";
+import { InjectModel } from "@nestjs/mongoose";
+import { Model } from "mongoose";
+import { User, UserDocument } from "../database/schemas/user.schema";
 
 @Injectable()
 export class UsersService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(@InjectModel(User.name) private readonly userModel: Model<UserDocument>) {}
 
   findByEmail(email: string) {
-    return this.prisma.user.findUnique({ where: { email } });
+    return this.userModel.findOne({ email }).lean();
   }
 
   findById(id: string) {
-    return this.prisma.user.findUnique({ where: { id } });
+    return this.userModel.findById(id).lean();
   }
 
-  create(data: CreateUserInput): Promise<User> {
-    return this.prisma.user.create({ data });
+  async create(data: Partial<User>): Promise<User> {
+    const created = await this.userModel.create(data);
+    return created.toObject();
   }
 
   async updateRefreshTokenHash(userId: string, refreshTokenHash: string | null) {
-    await this.prisma.user.update({
-      where: { id: userId },
-      data: { refreshTokenHash },
-    });
+    await this.userModel.updateOne({ _id: userId }, { refreshTokenHash }).exec();
   }
 }

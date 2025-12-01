@@ -1,92 +1,62 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
-import { PrismaService } from '../prisma/prisma.service';
-import { FilesService } from '../files/files.service';
+import { Injectable } from "@nestjs/common";
+import { InjectModel } from "@nestjs/mongoose";
+import { Model } from "mongoose";
+import { Order, OrderDocument, OrderStatusEnum } from "../database/schemas/order.schema";
+import { OrderItem, OrderItemDocument } from "../database/schemas/order-item.schema";
+import { Cart, CartDocument } from "../database/schemas/cart.schema";
+import { CartItem, CartItemDocument } from "../database/schemas/cart-item.schema";
 
 @Injectable()
 export class OrdersService {
-  constructor(private readonly prisma: PrismaService, private readonly filesService: FilesService) {}
+  constructor(
+    @InjectModel(Order.name) private readonly orderModel: Model<OrderDocument>,
+    @InjectModel(OrderItem.name) private readonly orderItemModel: Model<OrderItemDocument>,
+    @InjectModel(Cart.name) private readonly cartModel: Model<CartDocument>,
+    @InjectModel(CartItem.name) private readonly cartItemModel: Model<CartItemDocument>,
+  ) {}
 
-  async listOrders(userId: string) {
-    return this.prisma.order.findMany({
-      where: { userId },
-      orderBy: { createdAt: 'desc' },
-      include: {
-        items: {
-          include: {
-            beat: { select: { id: true, title: true, coverUrl: true } },
-            licenseType: true,
-          },
-        },
-      },
+  async list(userId: string) {
+    const orders = await this.orderModel.find({ userId }).sort({ createdAt: -1 }).lean();
+    const orderIds = orders.map((o) => o._id);
+    const items = await this.orderItemModel.find({ orderId: { $in: orderIds } }).lean();
+    const itemsMap = new Map<string, any[]>();
+    items.forEach((it) => {
+      const arr = itemsMap.get(it.orderId) ?? [];
+      arr.push(it);
+      itemsMap.set(it.orderId, arr);
     });
+    return orders.map((o) => ({
+      ...o,
+      items: itemsMap.get(o._id) ?? [],
+    }));
   }
 
-  async getOrder(userId: string, orderId: string) {
-    const order = await this.prisma.order.findFirst({
-      where: { id: orderId, userId },
-      include: {
-        items: {
-          include: {
-            beat: { select: { id: true, title: true, coverUrl: true } },
-            licenseType: true,
-            downloadGrants: true,
-          },
-        },
-      },
-    });
-
-    if (!order) {
-      throw new NotFoundException('Order not found');
+  async createFromCart(userId: string, currency = 'EUR') {
+    const cart = await this.cartModel.findOne({ userId }).lean();
+    if (!cart) {
+      return null;
     }
-    return order;
-  }
-
-  async getDownloadLink(userId: string, orderItemId: string) {
-    const orderItem = await this.prisma.orderItem.findFirst({
-      where: { id: orderItemId, order: { userId } },
-      include: {
-        downloadGrants: {
-          include: {
-            asset: true,
-          },
-        },
-        beat: {
-          include: {
-            assets: true,
-          },
-        },
-      },
-    });
-
-    if (!orderItem) {
-      throw new NotFoundException('Download unavailable');
+    const cartItems = await this.cartItemModel.find({ cartId: cart._id }).lean();
+    if (cartItems.length === 0) {
+      return null;
     }
-
-    const asset =
-      orderItem.downloadGrants[0]?.asset ??
-      orderItem.beat.assets.find((a) => a.type !== 'preview') ??
-      orderItem.beat.assets[0];
-
-    if (!asset) {
-      throw new NotFoundException('No assets linked to this beat');
-    }
-
-    const downloadUrl = await this.filesService.createDownloadUrl({ key: asset.storageKey });
-
-    await this.prisma.downloadGrant.upsert({
-      where: { orderItemId_assetId: { orderItemId, assetId: asset.id } },
-      update: {
-        presignedKey: asset.storageKey,
-        expiresAt: new Date(Date.now() + 10 * 60 * 1000),
-      },
-      create: {
-        orderItemId,
-        assetId: asset.id,
-        presignedKey: asset.storageKey,
-        expiresAt: new Date(Date.now() + 10 * 60 * 1000),
-      },
+    const totalCents = cartItems.reduce((acc, item) => acc + item.unitPriceSnapshotCents * item.qty, 0);
+    const order = await this.orderModel.create({
+      userId,
+      status: OrderStatusEnum.paid, // simplifié, pas de Stripe ici
+      totalCents,
+      currency,
     });
-
-    return downloadUrl;
+    await this.orderItemModel.insertMany(
+      cartItems.map((ci) => ({
+        orderId: order._id,
+        beatId: ci.beatId,
+        licenseTypeId: ci.licenseTypeId,
+        unitPriceCents: ci.unitPriceSnapshotCents,
+        qty: ci.qty,
+      })),
+    );
+    await this.cartItemModel.deleteMany({ cartId: cart._id });
+    return this.list(userId);
   }
 }

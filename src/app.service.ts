@@ -1,37 +1,25 @@
 import { Injectable } from '@nestjs/common';
-import { PrismaService } from './prisma/prisma.service';
-import { StripeService } from './payments/stripe.service';
+import { InjectConnection } from '@nestjs/mongoose';
+import { Connection } from 'mongoose';
 
 @Injectable()
 export class AppService {
-  constructor(private readonly prisma: PrismaService, private readonly stripeService: StripeService) {}
+  constructor(@InjectConnection() private readonly connection: Connection) {}
 
   async healthCheck() {
     const db = await this.checkDatabase();
-    const stripe = this.checkStripe();
-
     return {
-      status: db === 'ok' && stripe === 'ok' ? 'ok' : 'degraded',
+      status: db === 'ok' ? 'ok' : 'degraded',
       db,
-      stripe,
     };
   }
 
   private async checkDatabase(): Promise<'ok' | 'error'> {
     try {
-      await this.prisma.$queryRaw`SELECT 1`;
+      await this.connection?.db?.admin().ping();
       return 'ok';
     } catch (error) {
       return 'error';
-    }
-  }
-
-  private checkStripe(): 'ok' | 'missing' {
-    try {
-      this.stripeService.getClient();
-      return 'ok';
-    } catch (error) {
-      return 'missing';
     }
   }
 }
