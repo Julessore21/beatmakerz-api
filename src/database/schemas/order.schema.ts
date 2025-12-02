@@ -27,6 +27,12 @@ export class Order {
 
   @Prop({ type: String, required: true })
   currency!: string;
+
+  @Prop({ type: String })
+  stripeCheckoutSessionId?: string;
+
+  @Prop({ type: String })
+  stripePaymentIntentId?: string;
 }
 
 export const OrderSchema = SchemaFactory.createForClass(Order);
