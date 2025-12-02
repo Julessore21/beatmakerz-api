@@ -16,6 +16,17 @@ async function bootstrap() {
   const port = configService.get<number>('port') ?? 3000;
   const frontendUrl = configService.get<string>('frontendUrl');
 
+  const allowedOrigins = [
+    frontendUrl,
+    frontendUrl?.includes('://www.')
+      ? frontendUrl.replace('://www.', '://')
+      : frontendUrl?.replace('://', '://www.'),
+    'https://beatmakerz.vercel.app',
+    'https://www.beatmakerz.fr',
+    'https://beatmakerz.fr',
+    'http://localhost:3000',
+  ].filter(Boolean) as string[];
+
   app.use('/webhooks/stripe', raw({ type: 'application/json' }));
   app.use('/webhooks/stripe', (req, _res, next) => {
     (req as unknown as { rawBody?: Buffer }).rawBody = req.body;
@@ -26,7 +37,14 @@ async function bootstrap() {
   app.use(helmet());
   app.use(cookieParser());
   app.enableCors({
-    origin: frontendUrl ? [frontendUrl] : true,
+    origin: (origin, callback) => {
+      // Autoriser les requêtes sans header Origin (cron, Postman, Stripe...)
+      if (!origin) return callback(null, true);
+      if (allowedOrigins.includes(origin)) return callback(null, true);
+      return callback(new Error('Not allowed by CORS'));
+    },
+    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization'],
     credentials: true,
   });
 
