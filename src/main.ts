@@ -40,15 +40,11 @@ async function bootstrap() {
   app.use(helmet());
   app.use(cookieParser());
   app.enableCors({
-    origin: (origin, callback) => {
-      // Autoriser les requêtes sans header Origin (cron, Postman, Stripe...)
-      if (!origin) return callback(null, true);
-      if (allowedOrigins.includes(origin)) return callback(null, true);
-      return callback(new Error('Not allowed by CORS'));
-    },
+    origin: allowedOrigins,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'authorization'],
     credentials: true,
+    optionsSuccessStatus: 204,
   });
 
   app.useGlobalPipes(
