@@ -73,7 +73,8 @@ export class AuthController {
         domain = undefined;
       }
     }
-    const isProd = this.configService.get<string>('nodeEnv') === 'production' || process.env.NODE_ENV === 'production';
+    const envValue = this.configService.get<string>('env') ?? process.env.NODE_ENV;
+    const isProd = envValue === 'production';
     return {
       httpOnly: true,
       secure: isProd,
