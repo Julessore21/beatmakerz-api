@@ -8,6 +8,7 @@ import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
 import { AuthResponseDto } from './dto/tokens.dto';
 import { JwtRefreshGuard } from '../common/guards/jwt-refresh.guard';
+import { URL } from 'url';
 
 @ApiTags('auth')
 @Controller('auth')
@@ -48,25 +49,37 @@ export class AuthController {
     const user = req.user as { userId: string };
     await this.authService.logout(user.userId);
     res.cookie('refreshToken', '', {
-      httpOnly: true,
-      secure: this.isSecureCookie(),
-      sameSite: 'strict',
+      ...this.cookieBaseOptions(),
       maxAge: 0,
-      path: '/',
     });
   }
 
   private setRefreshCookie(res: Response, refreshToken: string) {
     res.cookie('refreshToken', refreshToken, {
-      httpOnly: true,
-      secure: this.isSecureCookie(),
-      sameSite: 'strict',
+      ...this.cookieBaseOptions(),
       maxAge: 30 * 24 * 60 * 60 * 1000,
-      path: '/',
     });
   }
 
-  private isSecureCookie(): boolean {
-    return this.configService.get<string>('env') === 'production';
+  private cookieBaseOptions() {
+    const frontend = this.configService.get<string>('frontendUrl');
+    let domain: string | undefined;
+    if (frontend) {
+      try {
+        const hostname = new URL(frontend).hostname;
+        const trimmed = hostname.startsWith('www.') ? hostname.slice(4) : hostname;
+        domain = `.${trimmed}`;
+      } catch {
+        domain = undefined;
+      }
+    }
+    const isProd = this.configService.get<string>('nodeEnv') === 'production' || process.env.NODE_ENV === 'production';
+    return {
+      httpOnly: true,
+      secure: isProd,
+      sameSite: isProd ? 'none' : 'lax',
+      path: '/',
+      domain,
+    };
   }
 }
