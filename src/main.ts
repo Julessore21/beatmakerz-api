@@ -13,7 +13,10 @@ async function bootstrap() {
   app.useLogger(app.get(Logger));
 
   const configService = app.get(ConfigService);
-  const port = configService.get<number>('port') ?? 3000;
+  const port =
+    configService.get<number>('PORT') ??
+    configService.get<number>('port') ??
+    3000;
   const frontendUrl = configService.get<string>('frontendUrl');
 
   const allowedOrigins = [

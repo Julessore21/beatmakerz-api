@@ -18,6 +18,7 @@ import { SettingsModule } from "./settings/settings.module";
 import { NotificationsModule } from "./notifications/notifications.module";
 import { ArtistsModule } from "./artists/artists.module";
 import { OrdersModule } from "./orders/orders.module";
+import { CheckoutModule } from "./checkout/checkout.module";
 
 @Module({
   imports: [
@@ -56,6 +57,7 @@ import { OrdersModule } from "./orders/orders.module";
     NotificationsModule,
     ArtistsModule,
     OrdersModule,
+    CheckoutModule,
   ],
   controllers: [AppController],
   providers: [
