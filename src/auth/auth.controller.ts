@@ -1,6 +1,6 @@
 import { Body, Controller, HttpCode, HttpStatus, Post, Req, Res, UseGuards } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
-import type { Response, Request } from 'express';
+import type { Response, Request, CookieOptions } from 'express';
 import { ConfigService } from '@nestjs/config';
 import { Throttle } from '@nestjs/throttler';
 import { AuthService } from './auth.service';
@@ -61,7 +61,7 @@ export class AuthController {
     });
   }
 
-  private cookieBaseOptions() {
+  private cookieBaseOptions(): CookieOptions {
     const frontend = this.configService.get<string>('frontendUrl');
     let domain: string | undefined;
     if (frontend) {
