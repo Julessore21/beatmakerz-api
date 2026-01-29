@@ -26,11 +26,11 @@ export class FilesService {
    */
   async uploadFile({ file, filename }: UploadOptions): Promise<string> {
     try {
-      // Créer le Blob depuis le buffer Multer
-      const blob = new Blob([file.buffer], { type: file.mimetype });
-
       // Créer FormData
       const formData = new FormData();
+
+      // Create Blob from buffer (type cast for Node.js compatibility)
+      const blob = new Blob([file.buffer as BlobPart], { type: file.mimetype });
       formData.append('file', blob, filename || file.originalname);
 
       // Upload vers FileUp

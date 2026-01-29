@@ -34,25 +34,14 @@ export class AdminService {
     });
   }
 
+  /**
+   * DEPRECATED: Cette méthode utilise l'ancien système S3 avec presigned URLs
+   * Utilisez les endpoints POST /beats/:id/assets/:type du BeatsController à la place
+   */
   async createAsset(userId: string, role: UserRole, beatId: string, dto: CreateAssetDto) {
-    await this.ensureBeatOwnership(userId, role, beatId);
-
-    const key = this.buildStorageKey(beatId, dto.type, dto.filename);
-    await this.prisma.asset.upsert({
-      where: { beatId_type: { beatId, type: dto.type } },
-      update: { storageKey: key },
-      create: {
-        beatId,
-        type: dto.type,
-        storageKey: key,
-      },
-    });
-
-    const presign = await this.filesService.createUploadUrl({
-      key,
-      contentType: dto.contentType,
-    });
-    return presign;
+    throw new Error(
+      'createAsset is deprecated with FileUp. Use POST /beats/:id/assets/:type endpoint instead.'
+    );
   }
 
   private async resolveArtistId(userId: string, role: UserRole, requestedArtistId?: string): Promise<string> {

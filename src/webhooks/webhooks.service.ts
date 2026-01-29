@@ -152,8 +152,8 @@ export class WebhooksService {
           },
         });
 
-        const { downloadUrl } = await this.filesService.createDownloadUrl({ key: asset.storageKey });
-        downloadLinks.push(downloadUrl);
+        // With FileUp, storageKey already contains the permanent download URL
+        downloadLinks.push(asset.storageKey);
       }
 
       await this.documentsService.generateLicensePdf({
