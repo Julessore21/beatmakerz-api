@@ -1,8 +1,17 @@
-import { Body, Controller, Post, UseGuards } from '@nestjs/common';
-import { ApiTags } from '@nestjs/swagger';
+import {
+  Body,
+  Controller,
+  Post,
+  UploadedFile,
+  UseGuards,
+  UseInterceptors,
+  BadRequestException,
+} from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
+import { ApiTags, ApiConsumes, ApiBody } from '@nestjs/swagger';
 import { AssetType, UserRole } from '@prisma/client';
 import { FilesService } from './files.service';
-import { PresignRequestDto, PresignOperation } from './dto/presign.dto';
+import { UploadFileDto } from './dto/upload-file.dto';
 import { JwtAccessGuard } from '../common/guards/jwt-access.guard';
 import { Roles } from '../common/decorators/roles.decorator';
 import { RolesGuard } from '../common/guards/roles.guard';
@@ -14,33 +23,77 @@ import { RolesGuard } from '../common/guards/roles.guard';
 export class FilesController {
   constructor(private readonly filesService: FilesService) {}
 
-  @Post('presign')
-  async presign(@Body() dto: PresignRequestDto) {
-    const storageKey = this.buildStorageKey(dto);
-    if (dto.operation === PresignOperation.Download) {
-      return this.filesService.createDownloadUrl({ key: storageKey });
+  /**
+   * Upload un fichier vers FileUp
+   * Remplace le système de presigned URLs S3
+   */
+  @Post('upload')
+  @UseInterceptors(FileInterceptor('file'))
+  @ApiConsumes('multipart/form-data')
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: {
+        file: {
+          type: 'string',
+          format: 'binary',
+        },
+        beatId: { type: 'string' },
+        assetType: { type: 'string', enum: Object.values(AssetType) },
+        filename: { type: 'string' },
+      },
+    },
+  })
+  async upload(
+    @UploadedFile() file: Express.Multer.File,
+    @Body() dto: UploadFileDto,
+  ) {
+    if (!file) {
+      throw new BadRequestException('No file uploaded');
     }
-    return this.filesService.createUploadUrl({ key: storageKey, contentType: dto.contentType });
+
+    // Construire le nom du fichier final
+    const filename = this.buildFilename(file, dto);
+
+    // Upload vers FileUp
+    const downloadLink = await this.filesService.uploadFile({
+      file,
+      filename,
+    });
+
+    return {
+      downloadLink,
+      filename,
+      size: file.size,
+      mimetype: file.mimetype,
+    };
   }
 
-  private buildStorageKey(dto: PresignRequestDto): string {
+  /**
+   * Construire le nom du fichier avec chemin logique
+   * Ex: beats/123/preview/track.mp3
+   */
+  private buildFilename(file: Express.Multer.File, dto: UploadFileDto): string {
+    const originalName = dto.filename || file.originalname;
+
     if (dto.assetType && dto.beatId) {
       const base = `beats/${dto.beatId}`;
       switch (dto.assetType) {
         case AssetType.preview:
-          return `${base}/preview/${dto.filename}`;
+          return `${base}/preview/${originalName}`;
         case AssetType.mp3:
-          return `${base}/mp3/${dto.filename}`;
+          return `${base}/mp3/${originalName}`;
         case AssetType.wav:
-          return `${base}/wav/${dto.filename}`;
+          return `${base}/wav/${originalName}`;
         case AssetType.stems:
-          return `${base}/stems/${dto.filename}`;
+          return `${base}/stems/${originalName}`;
         case AssetType.project:
-          return `${base}/project/${dto.filename}`;
+          return `${base}/project/${originalName}`;
         default:
-          return `${base}/${dto.filename}`;
+          return `${base}/${originalName}`;
       }
     }
-    return dto.filename;
+
+    return originalName;
   }
 }

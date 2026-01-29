@@ -36,19 +36,7 @@ class EnvironmentVariables {
   STRIPE_WEBHOOK_SECRET!: string;
 
   @IsString()
-  STORAGE_ENDPOINT!: string;
-
-  @IsString()
-  STORAGE_REGION!: string;
-
-  @IsString()
-  STORAGE_BUCKET!: string;
-
-  @IsString()
-  STORAGE_ACCESS_KEY!: string;
-
-  @IsString()
-  STORAGE_SECRET_KEY!: string;
+  FILEUP_API_KEY!: string;
 
   @IsString()
   EMAIL_API_KEY!: string;

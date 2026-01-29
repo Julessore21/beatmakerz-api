@@ -1,48 +1,89 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, InternalServerErrorException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { S3Client, PutObjectCommand, GetObjectCommand } from '@aws-sdk/client-s3';
-import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 
-interface PresignOptions {
-  key: string;
-  contentType?: string;
-  expiresIn?: number;
+interface FileUpResponse {
+  downloadLink: string;
+}
+
+interface UploadOptions {
+  file: Express.Multer.File;
+  filename?: string;
 }
 
 @Injectable()
 export class FilesService {
-  private readonly s3: S3Client;
-  private readonly bucket: string;
+  private readonly apiKey: string;
+  private readonly uploadEndpoint = 'https://file-up.fr/api/sharex/upload';
 
   constructor(private readonly configService: ConfigService) {
-    this.bucket = this.configService.getOrThrow<string>('storage.bucket');
-    this.s3 = new S3Client({
-      region: this.configService.get<string>('storage.region'),
-      endpoint: this.configService.get<string>('storage.endpoint'),
-      credentials: {
-        accessKeyId: this.configService.getOrThrow<string>('storage.accessKey'),
-        secretAccessKey: this.configService.getOrThrow<string>('storage.secretKey'),
-      },
-      forcePathStyle: true,
-    });
+    this.apiKey = this.configService.getOrThrow<string>('fileup.apiKey');
   }
 
-  async createUploadUrl({ key, contentType, expiresIn = 900 }: PresignOptions) {
-    const command = new PutObjectCommand({
-      Bucket: this.bucket,
-      Key: key,
-      ContentType: contentType,
-    });
-    const uploadUrl = await getSignedUrl(this.s3, command, { expiresIn });
-    return { uploadUrl, storageKey: key };
+  /**
+   * Upload un fichier vers FileUp
+   * @param options - Fichier et nom optionnel
+   * @returns downloadLink (URL permanente du fichier)
+   */
+  async uploadFile({ file, filename }: UploadOptions): Promise<string> {
+    try {
+      // Créer le Blob depuis le buffer Multer
+      const blob = new Blob([file.buffer], { type: file.mimetype });
+
+      // Créer FormData
+      const formData = new FormData();
+      formData.append('file', blob, filename || file.originalname);
+
+      // Upload vers FileUp
+      const response = await fetch(this.uploadEndpoint, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${this.apiKey}`,
+        },
+        body: formData,
+      });
+
+      if (!response.ok) {
+        const error = await response.text().catch(() => 'Unknown error');
+        throw new Error(`FileUp upload failed: ${response.status} - ${error}`);
+      }
+
+      const data: FileUpResponse = await response.json();
+
+      if (!data.downloadLink) {
+        throw new Error('FileUp response missing downloadLink');
+      }
+
+      return data.downloadLink;
+    } catch (error) {
+      throw new InternalServerErrorException(
+        `File upload failed: ${error.message}`,
+      );
+    }
   }
 
-  async createDownloadUrl({ key, expiresIn = 300 }: PresignOptions) {
-    const command = new GetObjectCommand({
-      Bucket: this.bucket,
-      Key: key,
-    });
-    const downloadUrl = await getSignedUrl(this.s3, command, { expiresIn });
-    return { downloadUrl };
+  /**
+   * Health check pour vérifier si FileUp est disponible
+   */
+  async checkHealth(): Promise<{ status: 'healthy' | 'degraded'; responseTime?: number }> {
+    const start = Date.now();
+    try {
+      const response = await fetch(this.uploadEndpoint, {
+        method: 'OPTIONS',
+        headers: {
+          Authorization: `Bearer ${this.apiKey}`,
+        },
+        signal: AbortSignal.timeout(5000),
+      });
+
+      const responseTime = Date.now() - start;
+
+      if (response.ok) {
+        return { status: 'healthy', responseTime };
+      }
+
+      return { status: 'degraded', responseTime };
+    } catch (error) {
+      return { status: 'degraded' };
+    }
   }
 }

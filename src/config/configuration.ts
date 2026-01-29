@@ -13,12 +13,8 @@ export default () => ({
     apiKey: process.env.STRIPE_KEY,
     webhookSecret: process.env.STRIPE_WEBHOOK_SECRET,
   },
-  storage: {
-    endpoint: process.env.STORAGE_ENDPOINT,
-    region: process.env.STORAGE_REGION,
-    bucket: process.env.STORAGE_BUCKET,
-    accessKey: process.env.STORAGE_ACCESS_KEY,
-    secretKey: process.env.STORAGE_SECRET_KEY,
+  fileup: {
+    apiKey: process.env.FILEUP_API_KEY,
   },
   email: {
     apiKey: process.env.EMAIL_API_KEY,

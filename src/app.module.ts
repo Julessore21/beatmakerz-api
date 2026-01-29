@@ -19,6 +19,7 @@ import { NotificationsModule } from "./notifications/notifications.module";
 import { ArtistsModule } from "./artists/artists.module";
 import { OrdersModule } from "./orders/orders.module";
 import { CheckoutModule } from "./checkout/checkout.module";
+import { FilesModule } from "./files/files.module";
 
 @Module({
   imports: [
@@ -58,6 +59,7 @@ import { CheckoutModule } from "./checkout/checkout.module";
     ArtistsModule,
     OrdersModule,
     CheckoutModule,
+    FilesModule,
   ],
   controllers: [AppController],
   providers: [

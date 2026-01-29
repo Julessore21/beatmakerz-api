@@ -1,11 +1,14 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, SortOrder } from 'mongoose';
 import { ListBeatsDto, BeatsSort } from './dto/list-beats.dto';
+import { CreateBeatDto } from './dto/create-beat.dto';
+import { UpdateBeatDto } from './dto/update-beat.dto';
 import { Beat, BeatDocument, BeatStatusEnum, BeatVisibilityEnum } from '../database/schemas/beat.schema';
 import { Artist, ArtistDocument } from '../database/schemas/artist.schema';
 import { Asset, AssetDocument, AssetTypeEnum } from '../database/schemas/asset.schema';
 import { PriceOverride, PriceOverrideDocument } from '../database/schemas/price-override.schema';
+import { FilesService } from '../files/files.service';
 
 @Injectable()
 export class BeatsService {
@@ -14,6 +17,7 @@ export class BeatsService {
     @InjectModel(Artist.name) private readonly artistModel: Model<ArtistDocument>,
     @InjectModel(Asset.name) private readonly assetModel: Model<AssetDocument>,
     @InjectModel(PriceOverride.name) private readonly priceOverrideModel: Model<PriceOverrideDocument>,
+    private readonly filesService: FilesService,
   ) {}
 
   async listBeats(query: ListBeatsDto) {
@@ -118,5 +122,127 @@ export class BeatsService {
       assets,
       priceOverrides,
     };
+  }
+
+  /**
+   * Créer un nouveau beat (admin)
+   */
+  async createBeat(dto: CreateBeatDto) {
+    // Vérifier que l'artist existe
+    const artist = await this.artistModel.findById(dto.artistId).lean();
+    if (!artist) {
+      throw new BadRequestException('Artist not found');
+    }
+
+    const beat = await this.beatModel.create({
+      artistId: dto.artistId,
+      title: dto.title,
+      bpm: dto.bpm,
+      key: dto.key,
+      genres: dto.genres ?? [],
+      moods: dto.moods ?? [],
+      status: dto.status ?? BeatStatusEnum.draft,
+      visibility: dto.visibility ?? BeatVisibilityEnum.public,
+    });
+
+    return beat.toObject();
+  }
+
+  /**
+   * Mettre à jour un beat existant (admin)
+   */
+  async updateBeat(id: string, dto: UpdateBeatDto) {
+    const beat = await this.beatModel.findById(id);
+    if (!beat) {
+      throw new NotFoundException('Beat not found');
+    }
+
+    Object.assign(beat, dto);
+    await beat.save();
+
+    return beat.toObject();
+  }
+
+  /**
+   * Upload cover image pour un beat via FileUp
+   */
+  async uploadCover(id: string, file: Express.Multer.File) {
+    const beat = await this.beatModel.findById(id);
+    if (!beat) {
+      throw new NotFoundException('Beat not found');
+    }
+
+    // Upload vers FileUp
+    const downloadLink = await this.filesService.uploadFile({
+      file,
+      filename: `beats/${id}/cover.${file.originalname.split('.').pop()}`,
+    });
+
+    // Mettre à jour le beat avec l'URL de la cover
+    beat.coverUrl = downloadLink;
+    await beat.save();
+
+    return { coverUrl: downloadLink };
+  }
+
+  /**
+   * Upload un asset (preview, mp3, wav, stems) pour un beat via FileUp
+   */
+  async uploadAsset(
+    id: string,
+    type: AssetTypeEnum,
+    file: Express.Multer.File,
+    durationSec?: number,
+  ) {
+    const beat = await this.beatModel.findById(id);
+    if (!beat) {
+      throw new NotFoundException('Beat not found');
+    }
+
+    // Upload vers FileUp
+    const downloadLink = await this.filesService.uploadFile({
+      file,
+      filename: `beats/${id}/${type}/${file.originalname}`,
+    });
+
+    // Créer ou mettre à jour l'asset dans la base de données
+    const existingAsset = await this.assetModel.findOne({ beatId: id, type });
+    if (existingAsset) {
+      existingAsset.storageKey = downloadLink;
+      existingAsset.sizeBytes = file.size;
+      if (durationSec !== undefined) {
+        existingAsset.durationSec = durationSec;
+      }
+      await existingAsset.save();
+      return existingAsset.toObject();
+    }
+
+    const asset = await this.assetModel.create({
+      beatId: id,
+      type,
+      storageKey: downloadLink,
+      sizeBytes: file.size,
+      durationSec,
+    });
+
+    return asset.toObject();
+  }
+
+  /**
+   * Supprimer un beat (admin)
+   */
+  async deleteBeat(id: string) {
+    const beat = await this.beatModel.findById(id);
+    if (!beat) {
+      throw new NotFoundException('Beat not found');
+    }
+
+    // Supprimer les assets associés
+    await this.assetModel.deleteMany({ beatId: id });
+
+    // Supprimer le beat
+    await beat.deleteOne();
+
+    return { message: 'Beat deleted successfully' };
   }
 }

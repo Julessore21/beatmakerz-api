@@ -6,6 +6,7 @@ import { Beat, BeatSchema } from '../database/schemas/beat.schema';
 import { Artist, ArtistSchema } from '../database/schemas/artist.schema';
 import { Asset, AssetSchema } from '../database/schemas/asset.schema';
 import { PriceOverride, PriceOverrideSchema } from '../database/schemas/price-override.schema';
+import { FilesModule } from '../files/files.module';
 
 @Module({
   imports: [
@@ -15,6 +16,7 @@ import { PriceOverride, PriceOverrideSchema } from '../database/schemas/price-ov
       { name: Asset.name, schema: AssetSchema },
       { name: PriceOverride.name, schema: PriceOverrideSchema },
     ]),
+    FilesModule,
   ],
   controllers: [BeatsController],
   providers: [BeatsService],
