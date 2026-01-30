@@ -14,7 +14,6 @@ import {
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { ApiTags, ApiConsumes, ApiBody } from '@nestjs/swagger';
-import { UserRole } from '@prisma/client';
 import { BeatsService } from './beats.service';
 import { ListBeatsDto } from './dto/list-beats.dto';
 import { CreateBeatDto } from './dto/create-beat.dto';
@@ -23,6 +22,7 @@ import { JwtAccessGuard } from '../common/guards/jwt-access.guard';
 import { Roles } from '../common/decorators/roles.decorator';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { AssetTypeEnum } from '../database/schemas/asset.schema';
+import { UserRoleEnum } from '../database/schemas/user.schema';
 
 @ApiTags('beats')
 @Controller('beats')
@@ -50,7 +50,7 @@ export class BeatsController {
    */
   @Post()
   @UseGuards(JwtAccessGuard, RolesGuard)
-  @Roles(UserRole.admin, UserRole.seller)
+  @Roles(UserRoleEnum.admin, UserRoleEnum.seller)
   create(@Body() dto: CreateBeatDto) {
     return this.beatsService.createBeat(dto);
   }
@@ -60,7 +60,7 @@ export class BeatsController {
    */
   @Put(':id')
   @UseGuards(JwtAccessGuard, RolesGuard)
-  @Roles(UserRole.admin, UserRole.seller)
+  @Roles(UserRoleEnum.admin, UserRoleEnum.seller)
   update(@Param('id') id: string, @Body() dto: UpdateBeatDto) {
     return this.beatsService.updateBeat(id, dto);
   }
@@ -70,7 +70,7 @@ export class BeatsController {
    */
   @Post(':id/cover')
   @UseGuards(JwtAccessGuard, RolesGuard)
-  @Roles(UserRole.admin, UserRole.seller)
+  @Roles(UserRoleEnum.admin, UserRoleEnum.seller)
   @UseInterceptors(FileInterceptor('file'))
   @ApiConsumes('multipart/form-data')
   @ApiBody({
@@ -100,7 +100,7 @@ export class BeatsController {
    */
   @Post(':id/assets/:type')
   @UseGuards(JwtAccessGuard, RolesGuard)
-  @Roles(UserRole.admin, UserRole.seller)
+  @Roles(UserRoleEnum.admin, UserRoleEnum.seller)
   @UseInterceptors(FileInterceptor('file'))
   @ApiConsumes('multipart/form-data')
   @ApiBody({
@@ -145,7 +145,7 @@ export class BeatsController {
    */
   @Delete(':id')
   @UseGuards(JwtAccessGuard, RolesGuard)
-  @Roles(UserRole.admin)
+  @Roles(UserRoleEnum.admin)
   delete(@Param('id') id: string) {
     return this.beatsService.deleteBeat(id);
   }
