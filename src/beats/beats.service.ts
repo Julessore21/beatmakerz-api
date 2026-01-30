@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException, Logger } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, SortOrder } from 'mongoose';
 import { ListBeatsDto, BeatsSort } from './dto/list-beats.dto';
@@ -12,6 +12,8 @@ import { FilesService } from '../files/files.service';
 
 @Injectable()
 export class BeatsService {
+  private readonly logger = new Logger(BeatsService.name);
+
   constructor(
     @InjectModel(Beat.name) private readonly beatModel: Model<BeatDocument>,
     @InjectModel(Artist.name) private readonly artistModel: Model<ArtistDocument>,
@@ -152,15 +154,27 @@ export class BeatsService {
    * Mettre à jour un beat existant (admin)
    */
   async updateBeat(id: string, dto: UpdateBeatDto) {
-    const beat = await this.beatModel.findById(id);
-    if (!beat) {
-      throw new NotFoundException('Beat not found');
+    try {
+      this.logger.debug(`Updating beat ${id} with data: ${JSON.stringify(dto)}`);
+
+      const beat = await this.beatModel.findById(id);
+      if (!beat) {
+        throw new NotFoundException('Beat not found');
+      }
+
+      this.logger.debug(`Found beat: ${JSON.stringify(beat.toObject())}`);
+
+      Object.assign(beat, dto);
+      this.logger.debug(`After Object.assign: ${JSON.stringify(beat.toObject())}`);
+
+      await beat.save();
+      this.logger.debug(`Beat saved successfully`);
+
+      return beat.toObject();
+    } catch (error) {
+      this.logger.error(`Failed to update beat ${id}:`, error);
+      throw error;
     }
-
-    Object.assign(beat, dto);
-    await beat.save();
-
-    return beat.toObject();
   }
 
   /**
