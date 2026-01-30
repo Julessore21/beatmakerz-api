@@ -154,27 +154,17 @@ export class BeatsService {
    * Mettre à jour un beat existant (admin)
    */
   async updateBeat(id: string, dto: UpdateBeatDto) {
-    try {
-      this.logger.debug(`Updating beat ${id} with data: ${JSON.stringify(dto)}`);
+    const beat = await this.beatModel.findByIdAndUpdate(
+      id,
+      { $set: dto },
+      { new: true, runValidators: true }
+    );
 
-      const beat = await this.beatModel.findById(id);
-      if (!beat) {
-        throw new NotFoundException('Beat not found');
-      }
-
-      this.logger.debug(`Found beat: ${JSON.stringify(beat.toObject())}`);
-
-      Object.assign(beat, dto);
-      this.logger.debug(`After Object.assign: ${JSON.stringify(beat.toObject())}`);
-
-      await beat.save();
-      this.logger.debug(`Beat saved successfully`);
-
-      return beat.toObject();
-    } catch (error) {
-      this.logger.error(`Failed to update beat ${id}:`, error);
-      throw error;
+    if (!beat) {
+      throw new NotFoundException('Beat not found');
     }
+
+    return beat.toObject();
   }
 
   /**
