@@ -68,10 +68,7 @@ import { FilesModule } from "./files/files.module";
       provide: APP_GUARD,
       useClass: ThrottlerGuard,
     },
-    {
-      provide: APP_GUARD,
-      useClass: RolesGuard,
-    },
+    // RolesGuard removed from global guards - applied at controller level with @UseGuards
   ],
 })
 export class AppModule {}
