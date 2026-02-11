@@ -9,6 +9,7 @@ import { Artist, ArtistDocument } from '../database/schemas/artist.schema';
 import { Asset, AssetDocument, AssetTypeEnum } from '../database/schemas/asset.schema';
 import { PriceOverride, PriceOverrideDocument } from '../database/schemas/price-override.schema';
 import { FilesService } from '../files/files.service';
+import { AudioProcessingService } from '../audio-processing/audio-processing.service';
 
 @Injectable()
 export class BeatsService {
@@ -20,6 +21,7 @@ export class BeatsService {
     @InjectModel(Asset.name) private readonly assetModel: Model<AssetDocument>,
     @InjectModel(PriceOverride.name) private readonly priceOverrideModel: Model<PriceOverrideDocument>,
     private readonly filesService: FilesService,
+    private readonly audioProcessingService: AudioProcessingService,
   ) {}
 
   async listBeats(query: ListBeatsDto) {
@@ -230,6 +232,129 @@ export class BeatsService {
     });
 
     return asset.toObject();
+  }
+
+  /**
+   * Upload audio avec génération automatique de preview
+   * - Upload la version complète (mp3)
+   * - Génère et upload une preview de 45 secondes
+   * - Retourne les deux assets créés
+   */
+  async uploadAudioWithPreview(
+    id: string,
+    file: Express.Multer.File,
+    generatePreview: boolean = true,
+    previewDurationSec: number = 45,
+  ) {
+    const beat = await this.beatModel.findById(id);
+    if (!beat) {
+      throw new NotFoundException('Beat not found');
+    }
+
+    this.logger.log(`Starting audio upload for beat ${id}`);
+
+    // 1. Obtenir les infos du fichier audio (durée totale)
+    const audioInfo = await this.audioProcessingService.getAudioInfo(
+      file.buffer,
+      file.originalname,
+    );
+    this.logger.log(`Audio info: duration=${audioInfo.durationSec}s, format=${audioInfo.format}`);
+
+    // 2. Upload de la version complète sur FileUp
+    const mp3DownloadLink = await this.filesService.uploadFile({
+      file,
+      filename: `beats/${id}/mp3/${file.originalname}`,
+    });
+    this.logger.log(`Full track uploaded: ${mp3DownloadLink}`);
+
+    // 3. Créer ou mettre à jour l'asset mp3
+    const existingMp3Asset = await this.assetModel.findOne({
+      beatId: id,
+      type: AssetTypeEnum.mp3,
+    });
+
+    let mp3Asset;
+    if (existingMp3Asset) {
+      existingMp3Asset.storageKey = mp3DownloadLink;
+      existingMp3Asset.sizeBytes = file.size;
+      existingMp3Asset.durationSec = audioInfo.durationSec;
+      await existingMp3Asset.save();
+      mp3Asset = existingMp3Asset.toObject();
+    } else {
+      mp3Asset = await this.assetModel.create({
+        beatId: id,
+        type: AssetTypeEnum.mp3,
+        storageKey: mp3DownloadLink,
+        sizeBytes: file.size,
+        durationSec: audioInfo.durationSec,
+      });
+      mp3Asset = mp3Asset.toObject();
+    }
+
+    // 4. Générer et upload la preview si demandé
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let previewAsset: any = null;
+    if (generatePreview) {
+      // Calculer la durée de la preview (max = durée totale)
+      const actualPreviewDuration = Math.min(previewDurationSec, audioInfo.durationSec);
+
+      // Générer la preview
+      const previewResult = await this.audioProcessingService.generatePreview(
+        file.buffer,
+        actualPreviewDuration,
+        file.originalname,
+      );
+      this.logger.log(`Preview generated: ${previewResult.buffer.length} bytes`);
+
+      // Créer un "faux" fichier Multer pour l'upload
+      const previewFile = {
+        buffer: previewResult.buffer,
+        originalname: `preview_${file.originalname}`,
+        mimetype: 'audio/mpeg',
+        size: previewResult.buffer.length,
+      } as Express.Multer.File;
+
+      // Upload de la preview sur FileUp
+      const previewDownloadLink = await this.filesService.uploadFile({
+        file: previewFile,
+        filename: `beats/${id}/preview/${file.originalname}`,
+      });
+      this.logger.log(`Preview uploaded: ${previewDownloadLink}`);
+
+      // Créer ou mettre à jour l'asset preview
+      const existingPreviewAsset = await this.assetModel.findOne({
+        beatId: id,
+        type: AssetTypeEnum.preview,
+      });
+
+      if (existingPreviewAsset) {
+        existingPreviewAsset.storageKey = previewDownloadLink;
+        existingPreviewAsset.sizeBytes = previewResult.buffer.length;
+        existingPreviewAsset.durationSec = actualPreviewDuration;
+        await existingPreviewAsset.save();
+        previewAsset = existingPreviewAsset.toObject();
+      } else {
+        const newPreviewAsset = await this.assetModel.create({
+          beatId: id,
+          type: AssetTypeEnum.preview,
+          storageKey: previewDownloadLink,
+          sizeBytes: previewResult.buffer.length,
+          durationSec: actualPreviewDuration,
+        });
+        previewAsset = newPreviewAsset.toObject();
+      }
+    }
+
+    this.logger.log(`Audio upload completed for beat ${id}`);
+
+    return {
+      success: true,
+      assets: {
+        preview: previewAsset,
+        mp3: mp3Asset,
+      },
+      message: 'Audio uploaded and preview generated successfully',
+    };
   }
 
   /**

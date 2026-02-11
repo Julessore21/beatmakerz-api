@@ -11,6 +11,8 @@ import {
   UseInterceptors,
   UploadedFile,
   BadRequestException,
+  ForbiddenException,
+  Req,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { ApiTags, ApiConsumes, ApiBody } from '@nestjs/swagger';
@@ -138,6 +140,70 @@ export class BeatsController {
 
     const duration = durationSec ? parseFloat(durationSec) : undefined;
     return this.beatsService.uploadAsset(id, type, file, duration);
+  }
+
+  /**
+   * Upload audio avec génération automatique de preview
+   * - Upload la version complète (mp3)
+   * - Génère automatiquement une preview de 45 secondes
+   * - Retourne les deux assets créés
+   */
+  @Post(':id/upload-audio')
+  @UseGuards(JwtAccessGuard, RolesGuard)
+  @Roles(UserRoleEnum.admin, UserRoleEnum.seller)
+  @UseInterceptors(FileInterceptor('file'))
+  @ApiConsumes('multipart/form-data')
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: {
+        file: {
+          type: 'string',
+          format: 'binary',
+          description: 'Audio file (MP3, WAV)',
+        },
+        generatePreview: {
+          type: 'string',
+          description: 'Generate preview automatically (default: "true")',
+          example: 'true',
+        },
+      },
+      required: ['file'],
+    },
+  })
+  async uploadAudio(
+    @Param('id') beatId: string,
+    @UploadedFile() file: Express.Multer.File,
+    @Body('generatePreview') generatePreview?: string,
+    @Req() req?: any,
+  ) {
+    if (!file) {
+      throw new BadRequestException('No file uploaded');
+    }
+
+    // Valider le format audio (MP3 ou WAV)
+    const allowedMimeTypes = ['audio/mpeg', 'audio/mp3', 'audio/wav', 'audio/wave', 'audio/x-wav'];
+    if (!allowedMimeTypes.includes(file.mimetype)) {
+      throw new BadRequestException(
+        `Invalid file type. Must be MP3 or WAV. Received: ${file.mimetype}`,
+      );
+    }
+
+    // Limite de taille: 100MB
+    const maxSize = 100 * 1024 * 1024;
+    if (file.size > maxSize) {
+      throw new BadRequestException(
+        `File too large. Maximum size is 100MB. Received: ${Math.round(file.size / 1024 / 1024)}MB`,
+      );
+    }
+
+    const shouldGeneratePreview = generatePreview !== 'false';
+
+    return this.beatsService.uploadAudioWithPreview(
+      beatId,
+      file,
+      shouldGeneratePreview,
+    );
   }
 
   /**

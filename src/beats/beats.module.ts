@@ -7,6 +7,7 @@ import { Artist, ArtistSchema } from '../database/schemas/artist.schema';
 import { Asset, AssetSchema } from '../database/schemas/asset.schema';
 import { PriceOverride, PriceOverrideSchema } from '../database/schemas/price-override.schema';
 import { FilesModule } from '../files/files.module';
+import { AudioProcessingModule } from '../audio-processing/audio-processing.module';
 
 @Module({
   imports: [
@@ -17,6 +18,7 @@ import { FilesModule } from '../files/files.module';
       { name: PriceOverride.name, schema: PriceOverrideSchema },
     ]),
     FilesModule,
+    AudioProcessingModule,
   ],
   controllers: [BeatsController],
   providers: [BeatsService],
