@@ -9,7 +9,7 @@ import {
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { ApiTags, ApiConsumes, ApiBody } from '@nestjs/swagger';
-import { AssetTypeEnumEnum } from '../database/schemas/asset.schema';
+import { AssetTypeEnum } from '../database/schemas/asset.schema';
 import { UserRoleEnum } from '../database/schemas/user.schema';
 import { FilesService } from './files.service';
 import { UploadFileDto } from './dto/upload-file.dto';
