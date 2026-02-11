@@ -1,5 +1,5 @@
 import { IsEnum, IsOptional, IsString } from 'class-validator';
-import { AssetType } from '@prisma/client';
+import { AssetTypeEnum } from '../../database/schemas/asset.schema';
 
 export enum PresignOperation {
   Upload = 'upload',
@@ -14,9 +14,9 @@ export class PresignRequestDto {
   @IsOptional()
   beatId?: string;
 
-  @IsEnum(AssetType)
+  @IsEnum(AssetTypeEnum)
   @IsOptional()
-  assetType?: AssetType;
+  assetType?: AssetTypeEnum;
 
   @IsString()
   filename!: string;

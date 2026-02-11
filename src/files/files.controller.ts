@@ -9,7 +9,8 @@ import {
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { ApiTags, ApiConsumes, ApiBody } from '@nestjs/swagger';
-import { AssetType, UserRole } from '@prisma/client';
+import { AssetTypeEnumEnum } from '../database/schemas/asset.schema';
+import { UserRoleEnum } from '../database/schemas/user.schema';
 import { FilesService } from './files.service';
 import { UploadFileDto } from './dto/upload-file.dto';
 import { JwtAccessGuard } from '../common/guards/jwt-access.guard';
@@ -19,7 +20,7 @@ import { RolesGuard } from '../common/guards/roles.guard';
 @ApiTags('files')
 @Controller('files')
 @UseGuards(JwtAccessGuard, RolesGuard)
-@Roles(UserRole.admin, UserRole.seller)
+@Roles(UserRoleEnum.admin, UserRoleEnum.seller)
 export class FilesController {
   constructor(private readonly filesService: FilesService) {}
 
@@ -39,7 +40,7 @@ export class FilesController {
           format: 'binary',
         },
         beatId: { type: 'string' },
-        assetType: { type: 'string', enum: Object.values(AssetType) },
+        assetType: { type: 'string', enum: Object.values(AssetTypeEnum) },
         filename: { type: 'string' },
       },
     },
@@ -79,15 +80,15 @@ export class FilesController {
     if (dto.assetType && dto.beatId) {
       const base = `beats/${dto.beatId}`;
       switch (dto.assetType) {
-        case AssetType.preview:
+        case AssetTypeEnum.preview:
           return `${base}/preview/${originalName}`;
-        case AssetType.mp3:
+        case AssetTypeEnum.mp3:
           return `${base}/mp3/${originalName}`;
-        case AssetType.wav:
+        case AssetTypeEnum.wav:
           return `${base}/wav/${originalName}`;
-        case AssetType.stems:
+        case AssetTypeEnum.stems:
           return `${base}/stems/${originalName}`;
-        case AssetType.project:
+        case AssetTypeEnum.project:
           return `${base}/project/${originalName}`;
         default:
           return `${base}/${originalName}`;

@@ -1,8 +1,6 @@
 import { Test, TestingModule } from "@nestjs/testing";
 import { AppController } from "./app.controller";
 import { AppService } from "./app.service";
-import { PrismaService } from "./prisma/prisma.service";
-import { StripeService } from "./payments/stripe.service";
 
 describe("AppController", () => {
   let appController: AppController;
@@ -11,17 +9,14 @@ describe("AppController", () => {
     const module: TestingModule = await Test.createTestingModule({
       controllers: [AppController],
       providers: [
-        AppService,
         {
-          provide: PrismaService,
+          provide: AppService,
           useValue: {
-            $queryRaw: jest.fn().mockResolvedValue([{ 1: 1 }]),
-          },
-        },
-        {
-          provide: StripeService,
-          useValue: {
-            getClient: jest.fn().mockReturnValue({}),
+            healthCheck: jest.fn().mockResolvedValue({
+              status: 'ok',
+              db: 'ok',
+              fileup: { status: 'healthy' },
+            }),
           },
         },
       ],

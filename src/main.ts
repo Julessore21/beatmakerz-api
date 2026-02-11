@@ -18,6 +18,8 @@ async function bootstrap() {
     configService.get<number>('port') ??
     3000;
   const frontendUrl = configService.get<string>('frontendUrl');
+  const nodeEnv = configService.get<string>('NODE_ENV') || process.env.NODE_ENV;
+  const isProduction = nodeEnv === 'production';
 
   const allowedOrigins = [
     frontendUrl,
@@ -27,7 +29,8 @@ async function bootstrap() {
     'https://beatmakerz.vercel.app',
     'https://www.beatmakerz.fr',
     'https://beatmakerz.fr',
-    'http://localhost:3000',
+    // Localhost uniquement en développement
+    ...(isProduction ? [] : ['http://localhost:3000']),
   ].filter(Boolean) as string[];
 
   app.use('/webhooks/stripe', raw({ type: 'application/json' }));
