@@ -235,10 +235,8 @@ export class BeatsService {
   }
 
   /**
-   * Upload audio avec génération automatique de preview
-   * - Upload la version complète (mp3)
-   * - Génère et upload une preview de 45 secondes
-   * - Retourne les deux assets créés
+   * Upload audio with automatic preview generation
+   * Uses pure JS mp3-cutter (no ffmpeg needed)
    */
   async uploadAudioWithPreview(
     id: string,
@@ -253,21 +251,21 @@ export class BeatsService {
 
     this.logger.log(`Starting audio upload for beat ${id}`);
 
-    // 1. Obtenir les infos du fichier audio (durée totale)
+    // 1. Get audio info (duration)
     const audioInfo = await this.audioProcessingService.getAudioInfo(
       file.buffer,
       file.originalname,
     );
     this.logger.log(`Audio info: duration=${audioInfo.durationSec}s, format=${audioInfo.format}`);
 
-    // 2. Upload de la version complète sur FileUp
+    // 2. Upload full track to FileUp
     const mp3DownloadLink = await this.filesService.uploadFile({
       file,
       filename: `beats/${id}/mp3/${file.originalname}`,
     });
     this.logger.log(`Full track uploaded: ${mp3DownloadLink}`);
 
-    // 3. Créer ou mettre à jour l'asset mp3
+    // 3. Create or update mp3 asset
     const existingMp3Asset = await this.assetModel.findOne({
       beatId: id,
       type: AssetTypeEnum.mp3,
@@ -291,14 +289,13 @@ export class BeatsService {
       mp3Asset = mp3Asset.toObject();
     }
 
-    // 4. Générer et upload la preview si demandé
+    // 4. Generate and upload preview if requested
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     let previewAsset: any = null;
     if (generatePreview) {
-      // Calculer la durée de la preview (max = durée totale)
       const actualPreviewDuration = Math.min(previewDurationSec, audioInfo.durationSec);
 
-      // Générer la preview
+      // Generate preview using pure JS (no ffmpeg)
       const previewResult = await this.audioProcessingService.generatePreview(
         file.buffer,
         actualPreviewDuration,
@@ -306,7 +303,7 @@ export class BeatsService {
       );
       this.logger.log(`Preview generated: ${previewResult.buffer.length} bytes`);
 
-      // Créer un "faux" fichier Multer pour l'upload
+      // Create fake Multer file for upload
       const previewFile = {
         buffer: previewResult.buffer,
         originalname: `preview_${file.originalname}`,
@@ -314,14 +311,14 @@ export class BeatsService {
         size: previewResult.buffer.length,
       } as Express.Multer.File;
 
-      // Upload de la preview sur FileUp
+      // Upload preview to FileUp
       const previewDownloadLink = await this.filesService.uploadFile({
         file: previewFile,
         filename: `beats/${id}/preview/${file.originalname}`,
       });
       this.logger.log(`Preview uploaded: ${previewDownloadLink}`);
 
-      // Créer ou mettre à jour l'asset preview
+      // Create or update preview asset
       const existingPreviewAsset = await this.assetModel.findOne({
         beatId: id,
         type: AssetTypeEnum.preview,

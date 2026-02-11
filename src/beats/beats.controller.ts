@@ -11,8 +11,6 @@ import {
   UseInterceptors,
   UploadedFile,
   BadRequestException,
-  ForbiddenException,
-  Req,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { ApiTags, ApiConsumes, ApiBody } from '@nestjs/swagger';
@@ -143,10 +141,10 @@ export class BeatsController {
   }
 
   /**
-   * Upload audio avec génération automatique de preview
-   * - Upload la version complète (mp3)
-   * - Génère automatiquement une preview de 45 secondes
-   * - Retourne les deux assets créés
+   * Upload audio with automatic preview generation
+   * - Uploads full track (MP3)
+   * - Automatically generates 45-second preview (pure JS, no ffmpeg)
+   * - Returns both assets
    */
   @Post(':id/upload-audio')
   @UseGuards(JwtAccessGuard, RolesGuard)
@@ -160,7 +158,7 @@ export class BeatsController {
         file: {
           type: 'string',
           format: 'binary',
-          description: 'Audio file (MP3, WAV)',
+          description: 'Audio file (MP3)',
         },
         generatePreview: {
           type: 'string',
@@ -175,21 +173,20 @@ export class BeatsController {
     @Param('id') beatId: string,
     @UploadedFile() file: Express.Multer.File,
     @Body('generatePreview') generatePreview?: string,
-    @Req() req?: any,
   ) {
     if (!file) {
       throw new BadRequestException('No file uploaded');
     }
 
-    // Valider le format audio (MP3 ou WAV)
-    const allowedMimeTypes = ['audio/mpeg', 'audio/mp3', 'audio/wav', 'audio/wave', 'audio/x-wav'];
+    // Validate audio format (MP3 only for automatic preview generation)
+    const allowedMimeTypes = ['audio/mpeg', 'audio/mp3'];
     if (!allowedMimeTypes.includes(file.mimetype)) {
       throw new BadRequestException(
-        `Invalid file type. Must be MP3 or WAV. Received: ${file.mimetype}`,
+        `Invalid file type. Must be MP3 for automatic preview generation. Received: ${file.mimetype}`,
       );
     }
 
-    // Limite de taille: 100MB
+    // Size limit: 100MB
     const maxSize = 100 * 1024 * 1024;
     if (file.size > maxSize) {
       throw new BadRequestException(

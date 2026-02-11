@@ -1,11 +1,12 @@
-import { Injectable, Logger, InternalServerErrorException, OnModuleInit } from '@nestjs/common';
-import ffmpeg from 'fluent-ffmpeg';
-import * as ffmpegInstaller from '@ffmpeg-installer/ffmpeg';
-import * as ffprobeInstaller from '@ffprobe-installer/ffprobe';
+import { Injectable, Logger, InternalServerErrorException } from '@nestjs/common';
+import * as musicMetadata from 'music-metadata';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
 import { randomUUID } from 'crypto';
+
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const mp3Cutter = require('mp3-cutter');
 
 export interface AudioInfo {
   durationSec: number;
@@ -14,27 +15,35 @@ export interface AudioInfo {
 }
 
 @Injectable()
-export class AudioProcessingService implements OnModuleInit {
+export class AudioProcessingService {
   private readonly logger = new Logger(AudioProcessingService.name);
 
-  onModuleInit() {
-    // Configure fluent-ffmpeg with installed binaries
-    if (ffmpegInstaller?.path) {
-      ffmpeg.setFfmpegPath(ffmpegInstaller.path);
-      this.logger.log(`ffmpeg path: ${ffmpegInstaller.path}`);
-    }
-    if (ffprobeInstaller?.path) {
-      ffmpeg.setFfprobePath(ffprobeInstaller.path);
-      this.logger.log(`ffprobe path: ${ffprobeInstaller.path}`);
+  /**
+   * Get audio file metadata (duration, format, bitrate)
+   */
+  async getAudioInfo(buffer: Buffer, originalFilename?: string): Promise<AudioInfo> {
+    try {
+      const metadata = await musicMetadata.parseBuffer(buffer, {
+        mimeType: this.getMimeType(originalFilename),
+      });
+
+      return {
+        durationSec: Math.round(metadata.format.duration ?? 0),
+        format: metadata.format.container ?? 'unknown',
+        bitrate: metadata.format.bitrate
+          ? Math.round(metadata.format.bitrate / 1000)
+          : undefined,
+      };
+    } catch (error) {
+      this.logger.error(`Failed to get audio info: ${error.message}`);
+      throw new InternalServerErrorException(
+        `Audio info extraction failed: ${error.message}`,
+      );
     }
   }
 
   /**
-   * Génère une preview audio en extrayant les N premières secondes
-   * @param buffer - Buffer du fichier audio source
-   * @param durationSec - Durée de la preview en secondes (default: 45)
-   * @param originalFilename - Nom original du fichier pour détecter le format
-   * @returns Buffer de la preview audio
+   * Generate a preview by cutting the first N seconds of an audio file
    */
   async generatePreview(
     buffer: Buffer,
@@ -43,31 +52,31 @@ export class AudioProcessingService implements OnModuleInit {
   ): Promise<{ buffer: Buffer; durationSec: number }> {
     const tempId = randomUUID();
     const tempDir = os.tmpdir();
-
-    // Déterminer l'extension du fichier d'entrée
-    const inputExt = originalFilename
-      ? path.extname(originalFilename).toLowerCase() || '.mp3'
-      : '.mp3';
-
-    const inputPath = path.join(tempDir, `input-${tempId}${inputExt}`);
+    const inputPath = path.join(tempDir, `input-${tempId}.mp3`);
     const outputPath = path.join(tempDir, `preview-${tempId}.mp3`);
 
     try {
-      // Écrire le buffer dans un fichier temporaire
+      // Write buffer to temp file
       await fs.promises.writeFile(inputPath, buffer);
       this.logger.debug(`Temp input file created: ${inputPath}`);
 
-      // Générer la preview avec ffmpeg
-      await this.runFfmpeg(inputPath, outputPath, durationSec);
+      // Get actual duration to avoid cutting beyond file length
+      const audioInfo = await this.getAudioInfo(buffer, originalFilename);
+      const actualDuration = Math.min(durationSec, audioInfo.durationSec);
+
+      // Cut the MP3 file
+      await this.cutMp3(inputPath, outputPath, 0, actualDuration);
       this.logger.debug(`Preview generated: ${outputPath}`);
 
-      // Lire le fichier de sortie
+      // Read the output file
       const previewBuffer = await fs.promises.readFile(outputPath);
-      this.logger.log(`Preview created successfully: ${previewBuffer.length} bytes`);
+      this.logger.log(
+        `Preview created: ${previewBuffer.length} bytes, ${actualDuration}s`,
+      );
 
       return {
         buffer: previewBuffer,
-        durationSec,
+        durationSec: actualDuration,
       };
     } catch (error) {
       this.logger.error(`Failed to generate preview: ${error.message}`, error.stack);
@@ -75,99 +84,69 @@ export class AudioProcessingService implements OnModuleInit {
         `Audio preview generation failed: ${error.message}`,
       );
     } finally {
-      // Nettoyer les fichiers temporaires
+      // Cleanup temp files
       await this.cleanupTempFile(inputPath);
       await this.cleanupTempFile(outputPath);
     }
   }
 
   /**
-   * Obtient les informations d'un fichier audio (durée, format, bitrate)
+   * Cut MP3 file using mp3-cutter (pure JS, no ffmpeg)
    */
-  async getAudioInfo(buffer: Buffer, originalFilename?: string): Promise<AudioInfo> {
-    const tempId = randomUUID();
-    const tempDir = os.tmpdir();
-    const inputExt = originalFilename
-      ? path.extname(originalFilename).toLowerCase() || '.mp3'
-      : '.mp3';
-    const inputPath = path.join(tempDir, `probe-${tempId}${inputExt}`);
-
-    try {
-      await fs.promises.writeFile(inputPath, buffer);
-
-      return await new Promise((resolve, reject) => {
-        ffmpeg.ffprobe(inputPath, (err, metadata) => {
-          if (err) {
-            reject(new Error(`ffprobe failed: ${err.message}`));
-            return;
-          }
-
-          const duration = metadata.format?.duration ?? 0;
-          const format = metadata.format?.format_name ?? 'unknown';
-          const bitrate = metadata.format?.bit_rate
-            ? Math.round(metadata.format.bit_rate / 1000)
-            : undefined;
-
-          resolve({
-            durationSec: Math.round(duration),
-            format,
-            bitrate,
-          });
-        });
-      });
-    } catch (error) {
-      this.logger.error(`Failed to get audio info: ${error.message}`);
-      throw new InternalServerErrorException(
-        `Audio info extraction failed: ${error.message}`,
-      );
-    } finally {
-      await this.cleanupTempFile(inputPath);
-    }
-  }
-
-  /**
-   * Exécute ffmpeg pour générer la preview
-   */
-  private runFfmpeg(
+  private cutMp3(
     inputPath: string,
     outputPath: string,
-    durationSec: number,
+    startSec: number,
+    endSec: number,
   ): Promise<void> {
     return new Promise((resolve, reject) => {
-      ffmpeg(inputPath)
-        .outputFormat('mp3')
-        .audioCodec('libmp3lame')
-        .audioBitrate('192k')
-        .duration(durationSec)
-        .on('start', (commandLine) => {
-          this.logger.debug(`ffmpeg command: ${commandLine}`);
-        })
-        .on('progress', (progress) => {
-          if (progress.percent) {
-            this.logger.debug(`Processing: ${Math.round(progress.percent)}%`);
+      try {
+        mp3Cutter.cut({
+          src: inputPath,
+          target: outputPath,
+          start: startSec,
+          end: endSec,
+        });
+        // mp3-cutter is synchronous but returns immediately
+        // Check if output file exists
+        setTimeout(() => {
+          if (fs.existsSync(outputPath)) {
+            resolve();
+          } else {
+            reject(new Error('Output file not created'));
           }
-        })
-        .on('error', (err) => {
-          this.logger.error(`ffmpeg error: ${err.message}`);
-          reject(new Error(`ffmpeg processing failed: ${err.message}`));
-        })
-        .on('end', () => {
-          this.logger.debug('ffmpeg processing completed');
-          resolve();
-        })
-        .save(outputPath);
+        }, 100);
+      } catch (error) {
+        reject(error);
+      }
     });
   }
 
   /**
-   * Nettoie un fichier temporaire
+   * Get MIME type from filename
+   */
+  private getMimeType(filename?: string): string | undefined {
+    if (!filename) return undefined;
+    const ext = path.extname(filename).toLowerCase();
+    const mimeTypes: Record<string, string> = {
+      '.mp3': 'audio/mpeg',
+      '.wav': 'audio/wav',
+      '.m4a': 'audio/mp4',
+      '.aac': 'audio/aac',
+      '.ogg': 'audio/ogg',
+      '.flac': 'audio/flac',
+    };
+    return mimeTypes[ext];
+  }
+
+  /**
+   * Cleanup temp file
    */
   private async cleanupTempFile(filePath: string): Promise<void> {
     try {
       await fs.promises.unlink(filePath);
       this.logger.debug(`Cleaned up temp file: ${filePath}`);
     } catch (error) {
-      // Ignorer si le fichier n'existe pas
       if (error.code !== 'ENOENT') {
         this.logger.warn(`Failed to cleanup temp file ${filePath}: ${error.message}`);
       }
