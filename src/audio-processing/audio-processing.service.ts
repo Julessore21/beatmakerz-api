@@ -1,6 +1,9 @@
 import { Injectable, Logger, InternalServerErrorException } from '@nestjs/common';
 import ffmpeg from 'fluent-ffmpeg';
-import { Readable, PassThrough } from 'stream';
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const ffmpegStatic = require('ffmpeg-static');
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const ffprobeStatic = require('ffprobe-static');
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
@@ -15,6 +18,18 @@ export interface AudioInfo {
 @Injectable()
 export class AudioProcessingService {
   private readonly logger = new Logger(AudioProcessingService.name);
+
+  constructor() {
+    // Configure fluent-ffmpeg to use static binaries
+    if (ffmpegStatic) {
+      ffmpeg.setFfmpegPath(ffmpegStatic as unknown as string);
+      this.logger.log(`ffmpeg path set to: ${ffmpegStatic}`);
+    }
+    if (ffprobeStatic?.path) {
+      ffmpeg.setFfprobePath(ffprobeStatic.path);
+      this.logger.log(`ffprobe path set to: ${ffprobeStatic.path}`);
+    }
+  }
 
   /**
    * Génère une preview audio en extrayant les N premières secondes
