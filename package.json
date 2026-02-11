@@ -60,7 +60,10 @@
     "stripe": "^19.1.0",
     "swagger-ui-express": "^5.0.1",
     "typescript": "^5.7.3",
-    "uuid": "^13.0.0"
+    "uuid": "^13.0.0",
+    "@types/express": "^5.0.0",
+    "@types/multer": "^2.0.0",
+    "@types/node": "^22.10.7"
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3.2.0",
@@ -69,10 +72,7 @@
     "@nestjs/schematics": "^11.0.0",
     "@nestjs/testing": "^11.0.1",
     "@types/cookie-parser": "^1.4.9",
-    "@types/express": "^5.0.0",
     "@types/jest": "^30.0.0",
-    "@types/multer": "^2.0.0",
-    "@types/node": "^22.10.7",
     "@types/passport-jwt": "^4.0.1",
     "@types/passport-local": "^1.0.38",
     "@types/pdfkit": "^0.17.3",
