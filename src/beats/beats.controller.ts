@@ -149,7 +149,7 @@ export class BeatsController {
   @Post(':id/upload-audio')
   @UseGuards(JwtAccessGuard, RolesGuard)
   @Roles(UserRoleEnum.admin, UserRoleEnum.seller)
-  @UseInterceptors(FileInterceptor('file'))
+  @UseInterceptors(FileInterceptor('file', { limits: { fileSize: 100 * 1024 * 1024 } }))
   @ApiConsumes('multipart/form-data')
   @ApiBody({
     schema: {

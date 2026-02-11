@@ -35,7 +35,7 @@ async function bootstrap() {
     (req as unknown as { rawBody?: Buffer }).rawBody = req.body;
     next();
   });
-  app.use(json({ limit: '5mb' }));
+  app.use(json({ limit: '100mb' }));
   app.use(urlencoded({ extended: true }));
   app.use(helmet());
   app.use(cookieParser());
