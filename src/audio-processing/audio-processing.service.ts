@@ -1,9 +1,7 @@
-import { Injectable, Logger, InternalServerErrorException } from '@nestjs/common';
+import { Injectable, Logger, InternalServerErrorException, OnModuleInit } from '@nestjs/common';
 import ffmpeg from 'fluent-ffmpeg';
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-const ffmpegStatic = require('ffmpeg-static');
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-const ffprobeStatic = require('ffprobe-static');
+import * as ffmpegInstaller from '@ffmpeg-installer/ffmpeg';
+import * as ffprobeInstaller from '@ffprobe-installer/ffprobe';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
@@ -16,18 +14,18 @@ export interface AudioInfo {
 }
 
 @Injectable()
-export class AudioProcessingService {
+export class AudioProcessingService implements OnModuleInit {
   private readonly logger = new Logger(AudioProcessingService.name);
 
-  constructor() {
-    // Configure fluent-ffmpeg to use static binaries
-    if (ffmpegStatic) {
-      ffmpeg.setFfmpegPath(ffmpegStatic as unknown as string);
-      this.logger.log(`ffmpeg path set to: ${ffmpegStatic}`);
+  onModuleInit() {
+    // Configure fluent-ffmpeg with installed binaries
+    if (ffmpegInstaller?.path) {
+      ffmpeg.setFfmpegPath(ffmpegInstaller.path);
+      this.logger.log(`ffmpeg path: ${ffmpegInstaller.path}`);
     }
-    if (ffprobeStatic?.path) {
-      ffmpeg.setFfprobePath(ffprobeStatic.path);
-      this.logger.log(`ffprobe path set to: ${ffprobeStatic.path}`);
+    if (ffprobeInstaller?.path) {
+      ffmpeg.setFfprobePath(ffprobeInstaller.path);
+      this.logger.log(`ffprobe path: ${ffprobeInstaller.path}`);
     }
   }
 
