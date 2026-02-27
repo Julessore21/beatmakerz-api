@@ -1,4 +1,4 @@
-import { Injectable, InternalServerErrorException } from '@nestjs/common';
+import { Injectable, InternalServerErrorException, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 
 interface FileUpResponse {
@@ -22,6 +22,7 @@ interface UploadOptions {
 
 @Injectable()
 export class FilesService {
+  private readonly logger = new Logger(FilesService.name);
   private readonly apiKey: string;
   private readonly uploadEndpoint = 'https://file-up.fr/api/sharex/upload';
 
@@ -60,6 +61,8 @@ export class FilesService {
       }
 
       const data: FileUpResponse = await response.json();
+
+      this.logger.log(`FileUp response: ${JSON.stringify(data)}`);
 
       if (!data.downloadLink) {
         throw new Error('FileUp response missing downloadLink');

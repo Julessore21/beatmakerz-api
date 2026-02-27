@@ -293,7 +293,10 @@ export class BeatsService {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     let previewAsset: any = null;
     if (generatePreview) {
-      const actualPreviewDuration = Math.min(previewDurationSec, audioInfo.durationSec);
+      // Si le track est plus court que la durée cible, plafonner à 50% pour ne pas livrer le son entier
+      const actualPreviewDuration = audioInfo.durationSec <= previewDurationSec
+        ? Math.floor(audioInfo.durationSec * 0.5)
+        : previewDurationSec;
 
       // Generate preview using pure JS (no ffmpeg)
       const previewResult = await this.audioProcessingService.generatePreview(
