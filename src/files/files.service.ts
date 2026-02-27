@@ -2,7 +2,17 @@ import { Injectable, InternalServerErrorException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 
 interface FileUpResponse {
+  status: string;
+  file: {
+    id: string;
+    fileName: string;
+    fileSize: number;
+    mimeType: string;
+    expireIn: string;
+    directDownload: boolean;
+  };
   downloadLink: string;
+  viewLink: string;
 }
 
 interface UploadOptions {
@@ -32,6 +42,8 @@ export class FilesService {
       // Create Blob from buffer (type cast for Node.js compatibility)
       const blob = new Blob([file.buffer as BlobPart], { type: file.mimetype });
       formData.append('file', blob, filename || file.originalname);
+      formData.append('directDownload', '1');
+      formData.append('expiry', 'null');
 
       // Upload vers FileUp
       const response = await fetch(this.uploadEndpoint, {
@@ -53,7 +65,7 @@ export class FilesService {
         throw new Error('FileUp response missing downloadLink');
       }
 
-      return this.toDirectLink(data.downloadLink);
+      return data.downloadLink;
     } catch (error) {
       throw new InternalServerErrorException(
         `File upload failed: ${error.message}`,
