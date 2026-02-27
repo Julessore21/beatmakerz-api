@@ -53,12 +53,20 @@ export class FilesService {
         throw new Error('FileUp response missing downloadLink');
       }
 
-      return data.downloadLink;
+      return this.toDirectLink(data.downloadLink);
     } catch (error) {
       throw new InternalServerErrorException(
         `File upload failed: ${error.message}`,
       );
     }
+  }
+
+  /**
+   * Convertit un lien dashboard FileUp en lien de téléchargement direct
+   * https://file-up.fr/dashboard/view/<id>  →  https://file-up.fr/<id>
+   */
+  private toDirectLink(url: string): string {
+    return url.replace('/dashboard/view/', '/');
   }
 
   /**
