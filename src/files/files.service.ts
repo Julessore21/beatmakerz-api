@@ -42,7 +42,7 @@ export class FilesService {
       // Create Blob from buffer (type cast for Node.js compatibility)
       const blob = new Blob([file.buffer as BlobPart], { type: file.mimetype });
       formData.append('file', blob, filename || file.originalname);
-      formData.append('directDownload', '1');
+      formData.append('directDownload', 'true');
       formData.append('expiry', 'null');
 
       // Upload vers FileUp
