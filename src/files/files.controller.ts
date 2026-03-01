@@ -57,13 +57,14 @@ export class FilesController {
     const filename = this.buildFilename(file, dto);
 
     // Upload vers FileUp
-    const downloadLink = await this.filesService.uploadFile({
+    const { downloadLink, viewLink } = await this.filesService.uploadFile({
       file,
       filename,
     });
 
     return {
       downloadLink,
+      viewLink,
       filename,
       size: file.size,
       mimetype: file.mimetype,

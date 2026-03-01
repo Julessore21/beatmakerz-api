@@ -24,7 +24,7 @@ interface UploadOptions {
 export class FilesService {
   private readonly logger = new Logger(FilesService.name);
   private readonly apiKey: string;
-  private readonly uploadEndpoint = 'https://file-up.fr/api/sharex/upload';
+  private readonly uploadEndpoint = 'https://file-up.fr/api/sharex/upload?directDownload=1';
 
   constructor(private readonly configService: ConfigService) {
     this.apiKey = this.configService.getOrThrow<string>('fileup.apiKey');
@@ -33,9 +33,9 @@ export class FilesService {
   /**
    * Upload un fichier vers FileUp
    * @param options - Fichier et nom optionnel
-   * @returns downloadLink (URL permanente du fichier)
+   * @returns { downloadLink, viewLink } — downloadLink force le téléchargement, viewLink sert en inline (streaming audio, affichage image)
    */
-  async uploadFile({ file, filename }: UploadOptions): Promise<string> {
+  async uploadFile({ file, filename }: UploadOptions): Promise<{ downloadLink: string; viewLink: string }> {
     try {
       // Créer FormData
       const formData = new FormData();
@@ -43,7 +43,6 @@ export class FilesService {
       // Create Blob from buffer (type cast for Node.js compatibility)
       const blob = new Blob([file.buffer as BlobPart], { type: file.mimetype });
       formData.append('file', blob, filename || file.originalname);
-      formData.append('directDownload', 'true');
       formData.append('expiry', 'null');
 
       // Upload vers FileUp
@@ -68,7 +67,10 @@ export class FilesService {
         throw new Error('FileUp response missing downloadLink');
       }
 
-      return data.downloadLink;
+      return {
+        downloadLink: data.downloadLink,
+        viewLink: data.viewLink || data.downloadLink,
+      };
     } catch (error) {
       throw new InternalServerErrorException(
         `File upload failed: ${error.message}`,

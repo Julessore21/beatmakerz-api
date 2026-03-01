@@ -129,6 +129,44 @@ export class BeatsService {
   }
 
   /**
+   * Liste tous les beats pour l'admin (tous statuts, toutes visibilités)
+   */
+  async listAllBeats() {
+    const beats = await this.beatModel
+      .find({})
+      .sort({ createdAt: -1 })
+      .limit(200)
+      .lean();
+
+    const beatIds = beats.map((b) => b._id);
+    const [artists, assets] = await Promise.all([
+      this.artistModel
+        .find({ _id: { $in: beats.map((b) => b.artistId) } })
+        .select({ name: 1, verified: 1 })
+        .lean(),
+      this.assetModel
+        .find({ beatId: { $in: beatIds } })
+        .select({ beatId: 1, type: 1, storageKey: 1, durationSec: 1 })
+        .lean(),
+    ]);
+
+    const artistMap = new Map(artists.map((a) => [a._id.toString(), a]));
+    const assetsMap = new Map<string, typeof assets>();
+    assets.forEach((a) => {
+      const key = a.beatId.toString();
+      const arr = assetsMap.get(key) ?? [];
+      arr.push(a);
+      assetsMap.set(key, arr);
+    });
+
+    return beats.map((b) => ({
+      ...b,
+      artist: artistMap.get(b.artistId.toString()) ?? null,
+      assets: assetsMap.get(b._id.toString()) ?? [],
+    }));
+  }
+
+  /**
    * Créer un nouveau beat (admin)
    */
   async createBeat(dto: CreateBeatDto) {
@@ -178,17 +216,17 @@ export class BeatsService {
       throw new NotFoundException('Beat not found');
     }
 
-    // Upload vers FileUp
-    const downloadLink = await this.filesService.uploadFile({
+    // Upload vers FileUp — on utilise viewLink pour affichage inline dans <img>
+    const { viewLink } = await this.filesService.uploadFile({
       file,
       filename: `beats/${id}/cover.${file.originalname.split('.').pop()}`,
     });
 
     // Mettre à jour le beat avec l'URL de la cover
-    beat.coverUrl = downloadLink;
+    beat.coverUrl = viewLink;
     await beat.save();
 
-    return { coverUrl: downloadLink };
+    return { coverUrl: viewLink };
   }
 
   /**
@@ -206,15 +244,18 @@ export class BeatsService {
     }
 
     // Upload vers FileUp
-    const downloadLink = await this.filesService.uploadFile({
+    // preview → viewLink (streaming inline dans <audio>)
+    // mp3/wav/stems/project → downloadLink (téléchargement forcé)
+    const links = await this.filesService.uploadFile({
       file,
       filename: `beats/${id}/${type}/${file.originalname}`,
     });
+    const storageKey = type === AssetTypeEnum.preview ? links.viewLink : links.downloadLink;
 
     // Créer ou mettre à jour l'asset dans la base de données
     const existingAsset = await this.assetModel.findOne({ beatId: id, type });
     if (existingAsset) {
-      existingAsset.storageKey = downloadLink;
+      existingAsset.storageKey = storageKey;
       existingAsset.sizeBytes = file.size;
       if (durationSec !== undefined) {
         existingAsset.durationSec = durationSec;
@@ -226,7 +267,7 @@ export class BeatsService {
     const asset = await this.assetModel.create({
       beatId: id,
       type,
-      storageKey: downloadLink,
+      storageKey,
       sizeBytes: file.size,
       durationSec,
     });
@@ -258,12 +299,12 @@ export class BeatsService {
     );
     this.logger.log(`Audio info: duration=${audioInfo.durationSec}s, format=${audioInfo.format}`);
 
-    // 2. Upload full track to FileUp
-    const mp3DownloadLink = await this.filesService.uploadFile({
+    // 2. Upload full track to FileUp — downloadLink pour forcer le téléchargement lors des achats
+    const mp3Links = await this.filesService.uploadFile({
       file,
       filename: `beats/${id}/mp3/${file.originalname}`,
     });
-    this.logger.log(`Full track uploaded: ${mp3DownloadLink}`);
+    this.logger.log(`Full track uploaded: ${mp3Links.downloadLink}`);
 
     // 3. Create or update mp3 asset
     const existingMp3Asset = await this.assetModel.findOne({
@@ -273,7 +314,7 @@ export class BeatsService {
 
     let mp3Asset;
     if (existingMp3Asset) {
-      existingMp3Asset.storageKey = mp3DownloadLink;
+      existingMp3Asset.storageKey = mp3Links.downloadLink;
       existingMp3Asset.sizeBytes = file.size;
       existingMp3Asset.durationSec = audioInfo.durationSec;
       await existingMp3Asset.save();
@@ -282,7 +323,7 @@ export class BeatsService {
       mp3Asset = await this.assetModel.create({
         beatId: id,
         type: AssetTypeEnum.mp3,
-        storageKey: mp3DownloadLink,
+        storageKey: mp3Links.downloadLink,
         sizeBytes: file.size,
         durationSec: audioInfo.durationSec,
       });
@@ -314,12 +355,14 @@ export class BeatsService {
         size: previewResult.buffer.length,
       } as Express.Multer.File;
 
-      // Upload preview to FileUp
-      const previewDownloadLink = await this.filesService.uploadFile({
+      // Upload preview to FileUp — on force l'extension .mp3 pour que FileUp détecte audio/mpeg
+      // On utilise viewLink pour le streaming inline dans le lecteur audio
+      const previewBasename = file.originalname.replace(/\.[^/.]+$/, '');
+      const previewLinks = await this.filesService.uploadFile({
         file: previewFile,
-        filename: `beats/${id}/preview/${file.originalname}`,
+        filename: `beats/${id}/preview/${previewBasename}_preview.mp3`,
       });
-      this.logger.log(`Preview uploaded: ${previewDownloadLink}`);
+      this.logger.log(`Preview uploaded: ${previewLinks.viewLink}`);
 
       // Create or update preview asset
       const existingPreviewAsset = await this.assetModel.findOne({
@@ -328,7 +371,7 @@ export class BeatsService {
       });
 
       if (existingPreviewAsset) {
-        existingPreviewAsset.storageKey = previewDownloadLink;
+        existingPreviewAsset.storageKey = previewLinks.viewLink;
         existingPreviewAsset.sizeBytes = previewResult.buffer.length;
         existingPreviewAsset.durationSec = actualPreviewDuration;
         await existingPreviewAsset.save();
@@ -337,7 +380,7 @@ export class BeatsService {
         const newPreviewAsset = await this.assetModel.create({
           beatId: id,
           type: AssetTypeEnum.preview,
-          storageKey: previewDownloadLink,
+          storageKey: previewLinks.viewLink,
           sizeBytes: previewResult.buffer.length,
           durationSec: actualPreviewDuration,
         });

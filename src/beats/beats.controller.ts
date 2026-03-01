@@ -38,6 +38,16 @@ export class BeatsController {
   }
 
   /**
+   * Liste tous les beats pour l'admin (tous statuts)
+   */
+  @Get('admin/all')
+  @UseGuards(JwtAccessGuard, RolesGuard)
+  @Roles(UserRoleEnum.admin, UserRoleEnum.seller)
+  listAll() {
+    return this.beatsService.listAllBeats();
+  }
+
+  /**
    * Détail d'un beat (pas d'auth requise)
    */
   @Get(':id')
