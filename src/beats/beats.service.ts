@@ -243,14 +243,13 @@ export class BeatsService {
       throw new NotFoundException('Beat not found');
     }
 
-    // Upload vers FileUp
-    // preview → viewLink (streaming inline dans <audio>)
-    // mp3/wav/stems/project → downloadLink (téléchargement forcé)
+    // Upload vers FileUp — downloadLink uniquement (lien direct vers le fichier binaire)
+    // Le streaming audio est géré par le proxy /beats/:id/stream/preview
     const links = await this.filesService.uploadFile({
       file,
       filename: `beats/${id}/${type}/${file.originalname}`,
     });
-    const storageKey = type === AssetTypeEnum.preview ? links.viewLink : links.downloadLink;
+    const storageKey = links.downloadLink;
 
     // Créer ou mettre à jour l'asset dans la base de données
     const existingAsset = await this.assetModel.findOne({ beatId: id, type });
@@ -356,13 +355,14 @@ export class BeatsService {
       } as Express.Multer.File;
 
       // Upload preview to FileUp — on force l'extension .mp3 pour que FileUp détecte audio/mpeg
-      // On utilise viewLink pour le streaming inline dans le lecteur audio
+      // On stocke le downloadLink (URL directe vers le fichier binaire)
+      // Le streaming est proxifié par /beats/:id/stream/preview
       const previewBasename = file.originalname.replace(/\.[^/.]+$/, '');
       const previewLinks = await this.filesService.uploadFile({
         file: previewFile,
         filename: `beats/${id}/preview/${previewBasename}_preview.mp3`,
       });
-      this.logger.log(`Preview uploaded: ${previewLinks.viewLink}`);
+      this.logger.log(`Preview uploaded: ${previewLinks.downloadLink}`);
 
       // Create or update preview asset
       const existingPreviewAsset = await this.assetModel.findOne({
@@ -371,7 +371,7 @@ export class BeatsService {
       });
 
       if (existingPreviewAsset) {
-        existingPreviewAsset.storageKey = previewLinks.viewLink;
+        existingPreviewAsset.storageKey = previewLinks.downloadLink;
         existingPreviewAsset.sizeBytes = previewResult.buffer.length;
         existingPreviewAsset.durationSec = actualPreviewDuration;
         await existingPreviewAsset.save();
@@ -380,7 +380,7 @@ export class BeatsService {
         const newPreviewAsset = await this.assetModel.create({
           beatId: id,
           type: AssetTypeEnum.preview,
-          storageKey: previewLinks.viewLink,
+          storageKey: previewLinks.downloadLink,
           sizeBytes: previewResult.buffer.length,
           durationSec: actualPreviewDuration,
         });
@@ -398,6 +398,19 @@ export class BeatsService {
       },
       message: 'Audio uploaded and preview generated successfully',
     };
+  }
+
+  /**
+   * Récupère l'URL de téléchargement direct du preview pour le proxy de streaming
+   */
+  async getPreviewStorageKey(id: string): Promise<string> {
+    const asset = await this.assetModel
+      .findOne({ beatId: id, type: AssetTypeEnum.preview })
+      .lean();
+    if (!asset) {
+      throw new NotFoundException('Preview not found for this beat');
+    }
+    return asset.storageKey;
   }
 
   /**

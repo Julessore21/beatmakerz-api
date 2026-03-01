@@ -11,7 +11,11 @@ import {
   UseInterceptors,
   UploadedFile,
   BadRequestException,
+  Req,
+  Res,
 } from '@nestjs/common';
+import { Request as ExpressRequest, Response as ExpressResponse } from 'express';
+import { Readable } from 'stream';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { ApiTags, ApiConsumes, ApiBody } from '@nestjs/swagger';
 import { BeatsService } from './beats.service';
@@ -45,6 +49,57 @@ export class BeatsController {
   @Roles(UserRoleEnum.admin, UserRoleEnum.seller)
   listAll() {
     return this.beatsService.listAllBeats();
+  }
+
+  /**
+   * Proxy de streaming audio pour la preview (public, pas d'auth)
+   * Supporte les requêtes Range pour la navigation dans le lecteur audio.
+   */
+  @Get(':id/stream/preview')
+  async streamPreview(
+    @Param('id') id: string,
+    @Req() req: ExpressRequest,
+    @Res() res: ExpressResponse,
+  ) {
+    try {
+      const fileUrl = await this.beatsService.getPreviewStorageKey(id);
+
+      const rangeHeader = req.headers['range'] as string | undefined;
+      const fetchHeaders: Record<string, string> = {};
+      if (rangeHeader) {
+        fetchHeaders['Range'] = rangeHeader;
+      }
+
+      const fileRes = await fetch(fileUrl, { headers: fetchHeaders });
+
+      if (!fileRes.ok && fileRes.status !== 206) {
+        return res.status(fileRes.status).json({ error: 'File unavailable' });
+      }
+
+      // Headers nécessaires pour l'audio streaming dans un <audio> HTML
+      res.setHeader('Content-Type', fileRes.headers.get('content-type') || 'audio/mpeg');
+      res.setHeader('Accept-Ranges', 'bytes');
+      res.setHeader('Content-Disposition', 'inline');
+      res.setHeader('Cache-Control', 'public, max-age=3600');
+
+      const contentLength = fileRes.headers.get('content-length');
+      if (contentLength) res.setHeader('Content-Length', contentLength);
+
+      const contentRange = fileRes.headers.get('content-range');
+      if (contentRange) res.setHeader('Content-Range', contentRange);
+
+      res.status(fileRes.status);
+
+      if (!fileRes.body) return res.end();
+
+      // Pipe du stream Web ReadableStream → Node.js Readable → Express Response
+      const readable = Readable.fromWeb(fileRes.body as Parameters<typeof Readable.fromWeb>[0]);
+      readable.pipe(res);
+    } catch (error: any) {
+      if (!res.headersSent) {
+        res.status(error.status ?? 500).json({ error: error.message || 'Stream error' });
+      }
+    }
   }
 
   /**
