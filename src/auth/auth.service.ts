@@ -59,6 +59,8 @@ export class AuthService {
   }
 
   async refresh(userId: string, refreshToken: string): Promise<AuthResponseDto> {
+    // AUDIT: findById sans filtre deletedAt intentionnel — un compte soft-deleted a refreshTokenHash: null,
+    // donc la vérification suivante le rejette avec 401 sans risque de régénérer des tokens.
     const user = await this.usersService.findById(userId);
     if (!user?.refreshTokenHash) {
       throw new UnauthorizedException('Refresh token invalid');

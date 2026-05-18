@@ -20,6 +20,9 @@ import { ArtistsModule } from "./artists/artists.module";
 import { OrdersModule } from "./orders/orders.module";
 import { CheckoutModule } from "./checkout/checkout.module";
 import { FilesModule } from "./files/files.module";
+import { PaymentsModule } from "./payments/payments.module";
+import { DownloadsModule } from "./downloads/downloads.module";
+import { ContactModule } from "./contact/contact.module";
 
 @Module({
   imports: [
@@ -60,6 +63,9 @@ import { FilesModule } from "./files/files.module";
     OrdersModule,
     CheckoutModule,
     FilesModule,
+    PaymentsModule,
+    DownloadsModule,
+    ContactModule,
   ],
   controllers: [AppController],
   providers: [

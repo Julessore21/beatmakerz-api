@@ -27,7 +27,7 @@ export class CheckoutService {
 
   async createSession(userId: string) {
     const [user, cart] = await Promise.all([
-      this.userModel.findById(userId).lean(),
+      this.userModel.findOne({ _id: userId, deletedAt: null }).lean(),
       this.cartModel.findOne({ userId }).lean(),
     ]);
 

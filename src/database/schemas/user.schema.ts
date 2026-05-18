@@ -32,6 +32,16 @@ export class User {
 
   @Prop({ type: String })
   refreshTokenHash?: string | null;
+
+  @Prop({ type: Date })
+  deletedAt?: Date;
 }
 
 export const UserSchema = SchemaFactory.createForClass(User);
+
+// Purge définitive des comptes soft-deleted après 30 jours (RGPD art. 17).
+// sparse: true exclut les utilisateurs actifs (sans deletedAt) de l'index TTL.
+UserSchema.index(
+  { deletedAt: 1 },
+  { expireAfterSeconds: 30 * 24 * 60 * 60, sparse: true },
+);

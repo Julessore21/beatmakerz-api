@@ -1,4 +1,4 @@
-import { Injectable } from "@nestjs/common";
+import { Injectable, NotFoundException } from "@nestjs/common";
 import { InjectModel } from "@nestjs/mongoose";
 import { Model } from "mongoose";
 import { Favorite, FavoriteDocument } from "../database/schemas/favorite.schema";
@@ -35,7 +35,7 @@ export class FavoritesService {
     }
     const beat = await this.beatModel.findOne({ _id: beatId, status: BeatStatusEnum.published }).lean();
     if (!beat) {
-      throw new Error('Beat not found');
+      throw new NotFoundException(`Beat ${beatId} not found`);
     }
     await this.favoriteModel.create({ userId, beatId });
     return { added: true };

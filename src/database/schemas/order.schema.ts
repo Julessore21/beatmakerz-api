@@ -1,6 +1,6 @@
-import { Prop, Schema, SchemaFactory } from "@nestjs/mongoose";
-import { Document } from "mongoose";
-import { randomUUID } from "crypto";
+import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
+import { Document } from 'mongoose';
+import { randomUUID } from 'crypto';
 
 export type OrderDocument = Order & Document;
 
@@ -19,7 +19,11 @@ export class Order {
   @Prop({ type: String, required: true })
   userId!: string;
 
-  @Prop({ type: String, enum: Object.values(OrderStatusEnum), default: OrderStatusEnum.pending })
+  @Prop({
+    type: String,
+    enum: Object.values(OrderStatusEnum),
+    default: OrderStatusEnum.pending,
+  })
   status!: OrderStatusEnum;
 
   @Prop({ type: Number, required: true })
@@ -33,6 +37,9 @@ export class Order {
 
   @Prop({ type: String })
   stripePaymentIntentId?: string;
+
+  @Prop({ type: Date })
+  paidAt?: Date;
 }
 
 export const OrderSchema = SchemaFactory.createForClass(Order);
