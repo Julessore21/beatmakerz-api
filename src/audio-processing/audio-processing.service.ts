@@ -35,9 +35,10 @@ export class AudioProcessingService {
           : undefined,
       };
     } catch (error) {
-      this.logger.error(`Failed to get audio info: ${error.message}`);
+      const err = error as Error;
+      this.logger.error(`Failed to get audio info: ${err.message}`);
       throw new InternalServerErrorException(
-        `Audio info extraction failed: ${error.message}`,
+        `Audio info extraction failed: ${err.message}`,
       );
     }
   }
@@ -79,9 +80,10 @@ export class AudioProcessingService {
         durationSec: actualDuration,
       };
     } catch (error) {
-      this.logger.error(`Failed to generate preview: ${error.message}`, error.stack);
+      const err = error as Error;
+      this.logger.error(`Failed to generate preview: ${err.message}`, err.stack);
       throw new InternalServerErrorException(
-        `Audio preview generation failed: ${error.message}`,
+        `Audio preview generation failed: ${err.message}`,
       );
     } finally {
       // Cleanup temp files
@@ -147,8 +149,9 @@ export class AudioProcessingService {
       await fs.promises.unlink(filePath);
       this.logger.debug(`Cleaned up temp file: ${filePath}`);
     } catch (error) {
-      if (error.code !== 'ENOENT') {
-        this.logger.warn(`Failed to cleanup temp file ${filePath}: ${error.message}`);
+      const err = error as NodeJS.ErrnoException;
+      if (err.code !== 'ENOENT') {
+        this.logger.warn(`Failed to cleanup temp file ${filePath}: ${err.message}`);
       }
     }
   }

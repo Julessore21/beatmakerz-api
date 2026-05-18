@@ -73,7 +73,7 @@ export class FilesService {
       };
     } catch (error) {
       throw new InternalServerErrorException(
-        `File upload failed: ${error.message}`,
+        `File upload failed: ${(error as Error).message}`,
       );
     }
   }
