@@ -54,7 +54,7 @@ export class PaymentsService {
     // Prod sur mesure : pas de commande en base, le brief est dans les metadata Stripe.
     if (session.metadata?.kind === 'custom_prod') {
       this.logger.log(
-        `Custom production paid — session: ${session.id}, email: ${session.customer_details?.email ?? 'n/a'}`,
+        `Custom production paid — session: ${session.id} (détails et e-mail dans le dashboard Stripe)`,
       );
       return;
     }
