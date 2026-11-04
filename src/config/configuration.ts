@@ -12,6 +12,7 @@ export default () => ({
   stripe: {
     apiKey: process.env.STRIPE_KEY,
     webhookSecret: process.env.STRIPE_WEBHOOK_SECRET,
+    customProdPriceId: process.env.STRIPE_PRICE_CUSTOM_PROD,
   },
   fileup: {
     apiKey: process.env.FILEUP_API_KEY,

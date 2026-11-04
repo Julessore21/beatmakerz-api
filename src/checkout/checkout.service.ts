@@ -5,11 +5,39 @@ import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { User, UserDocument } from '../database/schemas/user.schema';
 import { Cart, CartDocument } from '../database/schemas/cart.schema';
-import { CartItem, CartItemDocument } from '../database/schemas/cart-item.schema';
-import { LicenseType, LicenseTypeDocument } from '../database/schemas/license-type.schema';
+import {
+  CartItem,
+  CartItemDocument,
+} from '../database/schemas/cart-item.schema';
+import {
+  LicenseType,
+  LicenseTypeDocument,
+} from '../database/schemas/license-type.schema';
 import { Beat, BeatDocument } from '../database/schemas/beat.schema';
-import { Order, OrderDocument, OrderStatusEnum } from '../database/schemas/order.schema';
-import { OrderItem, OrderItemDocument } from '../database/schemas/order-item.schema';
+import {
+  Order,
+  OrderDocument,
+  OrderStatusEnum,
+} from '../database/schemas/order.schema';
+import {
+  OrderItem,
+  OrderItemDocument,
+} from '../database/schemas/order-item.schema';
+
+const CUSTOM_PROD_FIELDS = [
+  'genre',
+  'style',
+  'bpm',
+  'key',
+  'instruments',
+  'brief',
+  'notes',
+  'file',
+] as const;
+
+export type CustomProdBrief = Partial<
+  Record<(typeof CUSTOM_PROD_FIELDS)[number], string>
+>;
 
 @Injectable()
 export class CheckoutService {
@@ -18,11 +46,14 @@ export class CheckoutService {
     private readonly stripeService: StripeService,
     @InjectModel(User.name) private readonly userModel: Model<UserDocument>,
     @InjectModel(Cart.name) private readonly cartModel: Model<CartDocument>,
-    @InjectModel(CartItem.name) private readonly cartItemModel: Model<CartItemDocument>,
-    @InjectModel(LicenseType.name) private readonly licenseTypeModel: Model<LicenseTypeDocument>,
+    @InjectModel(CartItem.name)
+    private readonly cartItemModel: Model<CartItemDocument>,
+    @InjectModel(LicenseType.name)
+    private readonly licenseTypeModel: Model<LicenseTypeDocument>,
     @InjectModel(Beat.name) private readonly beatModel: Model<BeatDocument>,
     @InjectModel(Order.name) private readonly orderModel: Model<OrderDocument>,
-    @InjectModel(OrderItem.name) private readonly orderItemModel: Model<OrderItemDocument>,
+    @InjectModel(OrderItem.name)
+    private readonly orderItemModel: Model<OrderItemDocument>,
   ) {}
 
   async createSession(userId: string) {
@@ -35,12 +66,16 @@ export class CheckoutService {
       throw new BadRequestException('User not found');
     }
 
-    const cartItems = cart ? await this.cartItemModel.find({ cartId: cart._id }).lean() : [];
+    const cartItems = cart
+      ? await this.cartItemModel.find({ cartId: cart._id }).lean()
+      : [];
     if (!cart || cartItems.length === 0) {
       throw new BadRequestException('Cart is empty');
     }
 
-    const licenseTypeIds = [...new Set(cartItems.map((it) => it.licenseTypeId))];
+    const licenseTypeIds = [
+      ...new Set(cartItems.map((it) => it.licenseTypeId)),
+    ];
     const beatIds = [...new Set(cartItems.map((it) => it.beatId))];
     const [licenseTypes, beats] = await Promise.all([
       this.licenseTypeModel.find({ _id: { $in: licenseTypeIds } }).lean(),
@@ -50,7 +85,10 @@ export class CheckoutService {
     const beatMap = new Map(beats.map((b) => [b._id.toString(), b]));
 
     const currency = licenseTypes[0]?.currency || 'EUR';
-    const subtotalCents = cartItems.reduce((acc, item) => acc + item.unitPriceSnapshotCents * item.qty, 0);
+    const subtotalCents = cartItems.reduce(
+      (acc, item) => acc + item.unitPriceSnapshotCents * item.qty,
+      0,
+    );
 
     const order = await this.orderModel.create({
       userId,
@@ -87,26 +125,66 @@ export class CheckoutService {
     const frontendUrl = this.configService.get<string>('frontendUrl');
     const successUrl = `${frontendUrl}/web/checkout/success?session_id={CHECKOUT_SESSION_ID}`;
     const cancelUrl = `${frontendUrl}/web/checkout/cancel`;
-    const session = await this.stripeService.getClient().checkout.sessions.create({
-      mode: 'payment',
-      customer_email: user.email,
-      line_items: lineItems,
-      success_url: successUrl,
-      cancel_url: cancelUrl,
-      metadata: {
-        orderId: order.id,
-        userId,
-      },
-      payment_intent_data: {
+    const session = await this.stripeService
+      .getClient()
+      .checkout.sessions.create({
+        mode: 'payment',
+        customer_email: user.email,
+        line_items: lineItems,
+        success_url: successUrl,
+        cancel_url: cancelUrl,
         metadata: {
           orderId: order.id,
           userId,
         },
-      },
-    });
+        payment_intent_data: {
+          metadata: {
+            orderId: order.id,
+            userId,
+          },
+        },
+      });
 
-    await this.orderModel.updateOne({ _id: order._id }, { stripeCheckoutSessionId: session.id });
+    await this.orderModel.updateOne(
+      { _id: order._id },
+      { stripeCheckoutSessionId: session.id },
+    );
 
     return { url: session.url, orderId: order._id };
+  }
+
+  /**
+   * Paiement unique pour une prod sur mesure. Le prix vient de la config serveur
+   * (jamais du client) et le brief voyage dans les metadata Stripe : c'est là
+   * qu'on le retrouve (dashboard Stripe) une fois le paiement reçu.
+   */
+  async createCustomProdSession(brief: CustomProdBrief, email?: string) {
+    const priceId = this.configService.get<string>('stripe.customProdPriceId');
+    if (!priceId) {
+      throw new BadRequestException(
+        'Custom production price is not configured',
+      );
+    }
+
+    const metadata: Record<string, string> = { kind: 'custom_prod' };
+    for (const field of CUSTOM_PROD_FIELDS) {
+      const value = brief[field]?.trim();
+      if (value) metadata[field] = value.slice(0, 500);
+    }
+
+    const frontendUrl = this.configService.get<string>('frontendUrl');
+    const session = await this.stripeService
+      .getClient()
+      .checkout.sessions.create({
+        mode: 'payment',
+        line_items: [{ price: priceId, quantity: 1 }],
+        customer_email: email || undefined,
+        success_url: `${frontendUrl}/web/prodsurmesure?success=true&session_id={CHECKOUT_SESSION_ID}`,
+        cancel_url: `${frontendUrl}/web/prodsurmesure?canceled=true`,
+        metadata,
+        payment_intent_data: { metadata },
+      });
+
+    return { url: session.url };
   }
 }

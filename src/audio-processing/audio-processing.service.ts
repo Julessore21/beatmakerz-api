@@ -1,5 +1,5 @@
 import { Injectable, Logger, InternalServerErrorException } from '@nestjs/common';
-import * as musicMetadata from 'music-metadata';
+import type * as MusicMetadata from 'music-metadata';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
@@ -7,6 +7,12 @@ import { randomUUID } from 'crypto';
 
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const mp3Cutter = require('mp3-cutter');
+
+// music-metadata est ESM-only : un import statique devient un require() une fois
+// compilé en CommonJS et plante sur Node < 22.12. On force un vrai import().
+const loadMusicMetadata = new Function('return import("music-metadata")') as () => Promise<
+  typeof MusicMetadata
+>;
 
 export interface AudioInfo {
   durationSec: number;
@@ -23,7 +29,8 @@ export class AudioProcessingService {
    */
   async getAudioInfo(buffer: Buffer, originalFilename?: string): Promise<AudioInfo> {
     try {
-      const metadata = await musicMetadata.parseBuffer(buffer, {
+      const { parseBuffer } = await loadMusicMetadata();
+      const metadata = await parseBuffer(buffer, {
         mimeType: this.getMimeType(originalFilename),
       });
 

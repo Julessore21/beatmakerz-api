@@ -6,6 +6,7 @@ import { Beat, BeatSchema } from '../database/schemas/beat.schema';
 import { Artist, ArtistSchema } from '../database/schemas/artist.schema';
 import { Asset, AssetSchema } from '../database/schemas/asset.schema';
 import { PriceOverride, PriceOverrideSchema } from '../database/schemas/price-override.schema';
+import { LicenseType, LicenseTypeSchema } from '../database/schemas/license-type.schema';
 import { FilesModule } from '../files/files.module';
 import { AudioProcessingModule } from '../audio-processing/audio-processing.module';
 
@@ -16,6 +17,7 @@ import { AudioProcessingModule } from '../audio-processing/audio-processing.modu
       { name: Artist.name, schema: ArtistSchema },
       { name: Asset.name, schema: AssetSchema },
       { name: PriceOverride.name, schema: PriceOverrideSchema },
+      { name: LicenseType.name, schema: LicenseTypeSchema },
     ]),
     FilesModule,
     AudioProcessingModule,

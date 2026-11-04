@@ -19,6 +19,11 @@ import {
   CartItem,
   CartItemDocument,
 } from '../database/schemas/cart-item.schema';
+import { Beat, BeatDocument } from '../database/schemas/beat.schema';
+import {
+  LicenseType,
+  LicenseTypeDocument,
+} from '../database/schemas/license-type.schema';
 
 @Injectable()
 export class OrdersService {
@@ -29,26 +34,52 @@ export class OrdersService {
     @InjectModel(Cart.name) private readonly cartModel: Model<CartDocument>,
     @InjectModel(CartItem.name)
     private readonly cartItemModel: Model<CartItemDocument>,
+    @InjectModel(Beat.name) private readonly beatModel: Model<BeatDocument>,
+    @InjectModel(LicenseType.name)
+    private readonly licenseTypeModel: Model<LicenseTypeDocument>,
   ) {}
 
+  /**
+   * Achats de l'utilisateur : uniquement les commandes payées ou remboursées
+   * (les checkouts abandonnés restent invisibles), avec titre du beat et licence.
+   */
   async list(userId: string) {
     const orders = await this.orderModel
-      .find({ userId })
+      .find({
+        userId,
+        status: { $in: [OrderStatusEnum.paid, OrderStatusEnum.refunded] },
+      })
       .sort({ createdAt: -1 })
       .lean();
-    const orderIds = orders.map((o) => o._id);
     const items = await this.orderItemModel
-      .find({ orderId: { $in: orderIds } })
+      .find({ orderId: { $in: orders.map((o) => o._id) } })
       .lean();
-    const itemsMap = new Map<string, any[]>();
-    items.forEach((it) => {
-      const arr = itemsMap.get(it.orderId) ?? [];
-      arr.push(it);
-      itemsMap.set(it.orderId, arr);
-    });
+
+    const [beats, licenses] = await Promise.all([
+      this.beatModel
+        .find({ _id: { $in: [...new Set(items.map((it) => it.beatId))] } })
+        .select({ title: 1, coverUrl: 1 })
+        .lean(),
+      this.licenseTypeModel
+        .find({
+          _id: { $in: [...new Set(items.map((it) => it.licenseTypeId))] },
+        })
+        .select({ code: 1 })
+        .lean(),
+    ]);
+    const beatMap = new Map(beats.map((b) => [String(b._id), b]));
+    const licenseMap = new Map(licenses.map((l) => [String(l._id), l]));
+
     return orders.map((o) => ({
       ...o,
-      items: itemsMap.get(o._id) ?? [],
+      items: items
+        .filter((it) => it.orderId === o._id)
+        .map((it) => ({
+          ...it,
+          beat: beatMap.get(it.beatId) ?? null,
+          license: licenseMap.get(it.licenseTypeId) ?? null,
+          downloadable: o.status === OrderStatusEnum.paid,
+        })),
     }));
   }
 
@@ -110,7 +141,25 @@ export class OrdersService {
         stripePaymentIntentId,
       },
     );
-    return { updated: result.modifiedCount > 0 };
+    const updated = result.modifiedCount > 0;
+    if (updated) await this.removePaidItemsFromCart(orderId);
+    return { updated };
+  }
+
+  /** Retire du panier de l'acheteur les beats qu'il vient de payer. */
+  private async removePaidItemsFromCart(orderId: string) {
+    const order = await this.orderModel.findById(orderId).lean();
+    const cart = order
+      ? await this.cartModel.findOne({ userId: order.userId }).lean()
+      : null;
+    if (!cart) return;
+    const paidBeatIds = (
+      await this.orderItemModel.find({ orderId }).lean()
+    ).map((it) => it.beatId);
+    await this.cartItemModel.deleteMany({
+      cartId: cart._id,
+      beatId: { $in: paidBeatIds },
+    });
   }
 
   async markAsFailed(orderId: string): Promise<{ updated: boolean }> {

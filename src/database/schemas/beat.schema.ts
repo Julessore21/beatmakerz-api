@@ -49,4 +49,8 @@ export class Beat {
 
 export const BeatSchema = SchemaFactory.createForClass(Beat);
 BeatSchema.index({ artistId: 1, createdAt: -1 });
-BeatSchema.index({ title: 'text', genres: 1, moods: 1 });
+// genres/moods sont des tableaux : ils ne peuvent pas faire partie d'un index texte
+// composé (MongoDB refuserait alors toute insertion de beat). Index séparés.
+BeatSchema.index({ title: 'text' });
+BeatSchema.index({ genres: 1 });
+BeatSchema.index({ moods: 1 });

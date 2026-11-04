@@ -28,9 +28,11 @@ export class PaymentsService {
   async handleEvent(event: Stripe.Event): Promise<void> {
     switch (event.type) {
       case 'checkout.session.completed':
+      case 'checkout.session.async_payment_succeeded':
         await this.handleCheckoutSessionCompleted(event);
         break;
       case 'checkout.session.expired':
+      case 'checkout.session.async_payment_failed':
         await this.handleCheckoutSessionFailed(event);
         break;
       default:
@@ -42,6 +44,21 @@ export class PaymentsService {
     event: Stripe.Event,
   ): Promise<void> {
     const session = event.data.object as Stripe.Checkout.Session;
+
+    // Paiement différé (virement…) : on attend async_payment_succeeded.
+    if (session.payment_status !== 'paid') {
+      this.logger.log(`Session ${session.id} not paid yet — waiting`);
+      return;
+    }
+
+    // Prod sur mesure : pas de commande en base, le brief est dans les metadata Stripe.
+    if (session.metadata?.kind === 'custom_prod') {
+      this.logger.log(
+        `Custom production paid — session: ${session.id}, email: ${session.customer_details?.email ?? 'n/a'}`,
+      );
+      return;
+    }
+
     const orderId = session.metadata?.orderId;
 
     if (!orderId) {

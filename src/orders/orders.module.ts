@@ -10,6 +10,11 @@ import {
 import { Cart, CartSchema } from '../database/schemas/cart.schema';
 import { CartItem, CartItemSchema } from '../database/schemas/cart-item.schema';
 import { Asset, AssetSchema } from '../database/schemas/asset.schema';
+import { Beat, BeatSchema } from '../database/schemas/beat.schema';
+import {
+  LicenseType,
+  LicenseTypeSchema,
+} from '../database/schemas/license-type.schema';
 import { DownloadsModule } from '../downloads/downloads.module';
 
 @Module({
@@ -21,6 +26,8 @@ import { DownloadsModule } from '../downloads/downloads.module';
       { name: Cart.name, schema: CartSchema },
       { name: CartItem.name, schema: CartItemSchema },
       { name: Asset.name, schema: AssetSchema },
+      { name: Beat.name, schema: BeatSchema },
+      { name: LicenseType.name, schema: LicenseTypeSchema },
     ]),
   ],
   controllers: [OrdersController],

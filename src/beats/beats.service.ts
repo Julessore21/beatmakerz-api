@@ -8,6 +8,8 @@ import { Beat, BeatDocument, BeatStatusEnum, BeatVisibilityEnum } from '../datab
 import { Artist, ArtistDocument } from '../database/schemas/artist.schema';
 import { Asset, AssetDocument, AssetTypeEnum } from '../database/schemas/asset.schema';
 import { PriceOverride, PriceOverrideDocument } from '../database/schemas/price-override.schema';
+import { LicenseCodeEnum, LicenseType, LicenseTypeDocument } from '../database/schemas/license-type.schema';
+import { resolveLicensePrice } from '../common/utils/pricing.util';
 import { FilesService } from '../files/files.service';
 import { AudioProcessingService } from '../audio-processing/audio-processing.service';
 
@@ -20,9 +22,26 @@ export class BeatsService {
     @InjectModel(Artist.name) private readonly artistModel: Model<ArtistDocument>,
     @InjectModel(Asset.name) private readonly assetModel: Model<AssetDocument>,
     @InjectModel(PriceOverride.name) private readonly priceOverrideModel: Model<PriceOverrideDocument>,
+    @InjectModel(LicenseType.name) private readonly licenseTypeModel: Model<LicenseTypeDocument>,
     private readonly filesService: FilesService,
     private readonly audioProcessingService: AudioProcessingService,
   ) {}
+
+  /**
+   * Prix affiché d'un beat = prix de la licence Basic (ou son override pour ce beat).
+   * Même calcul que le panier, pour que le prix affiché soit celui facturé.
+   */
+  private async basicPriceResolver() {
+    const basic = await this.licenseTypeModel.findOne({ code: LicenseCodeEnum.Basic }).lean();
+    return (beatId: string, overrides: PriceOverride[]) =>
+      basic
+        ? resolveLicensePrice(
+            { id: String(basic._id), priceCents: basic.priceCents },
+            overrides.map((o) => ({ beatId: o.beatId, licenseTypeId: o.licenseTypeId, priceCents: o.priceCents })),
+            beatId,
+          )
+        : null;
+  }
 
   async listBeats(query: ListBeatsDto) {
     const take = query.limit ?? 20;
@@ -33,13 +52,15 @@ export class BeatsService {
 
     let artistIdsForSearch: string[] = [];
     if (query.query) {
+      // Échappe la saisie : sinon elle est interprétée comme une regex (ReDoS, erreurs).
+      const search = query.query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
       const artists = await this.artistModel
-        .find({ name: { $regex: query.query, $options: 'i' } })
+        .find({ name: { $regex: search, $options: 'i' } })
         .select({ _id: 1 })
         .lean();
       artistIdsForSearch = artists.map((a) => a._id);
       filters.$or = [
-        { title: { $regex: query.query, $options: 'i' } },
+        { title: { $regex: search, $options: 'i' } },
         artistIdsForSearch.length ? { artistId: { $in: artistIdsForSearch } } : undefined,
       ];
       filters.$or = (filters.$or as unknown[]).filter(Boolean);
@@ -98,12 +119,17 @@ export class BeatsService {
       nextCursor = beats[take]?._id ?? null;
     }
 
-    const items = trimmed.map((b) => ({
-      ...b,
-      artist: artistMap.get(b.artistId.toString()) ?? null,
-      assets: previewMap.get(b._id.toString()) ?? [],
-      priceOverrides: overrides.filter((o) => o.beatId === b._id),
-    }));
+    const priceOf = await this.basicPriceResolver();
+    const items = trimmed.map((b) => {
+      const beatOverrides = overrides.filter((o) => o.beatId === b._id);
+      return {
+        ...b,
+        artist: artistMap.get(b.artistId.toString()) ?? null,
+        assets: previewMap.get(b._id.toString()) ?? [],
+        priceOverrides: beatOverrides,
+        priceCents: priceOf(b._id, beatOverrides),
+      };
+    });
 
     return { items, cursor: nextCursor };
   }
@@ -116,15 +142,18 @@ export class BeatsService {
 
     const [artist, assets, priceOverrides] = await Promise.all([
       this.artistModel.findById(beat.artistId).select({ name: 1, verified: 1 }).lean(),
-      this.assetModel.find({ beatId: id }).lean(),
+      // Endpoint public : seule la preview est exposée, jamais le fichier complet.
+      this.assetModel.find({ beatId: id, type: AssetTypeEnum.preview }).lean(),
       this.priceOverrideModel.find({ beatId: id }).lean(),
     ]);
 
+    const priceOf = await this.basicPriceResolver();
     return {
       ...beat,
       artist,
       assets,
       priceOverrides,
+      priceCents: priceOf(beat._id, priceOverrides),
     };
   }
 

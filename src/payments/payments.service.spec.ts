@@ -18,6 +18,7 @@ const makeEvent = (overrides: Partial<Stripe.Event> = {}): Stripe.Event => ({
       id: 'cs_test_session',
       object: 'checkout.session',
       payment_intent: 'pi_test_001',
+      payment_status: 'paid',
       metadata: { orderId: 'order-123', userId: 'user-abc' },
     } as Stripe.Checkout.Session,
   },
@@ -124,6 +125,7 @@ describe('PaymentsService', () => {
         data: {
           object: {
             id: 'cs_test',
+            payment_status: 'paid',
             object: 'checkout.session',
             payment_intent: 'pi_test',
             metadata: {},
@@ -132,6 +134,45 @@ describe('PaymentsService', () => {
       });
 
       await expect(service.handleEvent(event)).resolves.not.toThrow();
+      expect(ordersService.markAsPaid).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('handleEvent — cas particuliers', () => {
+    const session = (extra: Partial<Stripe.Checkout.Session>) =>
+      makeEvent({
+        data: {
+          object: {
+            id: 'cs_x',
+            object: 'checkout.session',
+            payment_intent: 'pi_x',
+            metadata: { orderId: 'order-123' },
+            ...extra,
+          } as Stripe.Checkout.Session,
+        },
+      });
+
+    it("n'encaisse pas une session dont le paiement n'est pas encore reçu", async () => {
+      await service.handleEvent(session({ payment_status: 'unpaid' }));
+      expect(ordersService.markAsPaid).not.toHaveBeenCalled();
+    });
+
+    it('encaisse un paiement différé confirmé (async_payment_succeeded)', async () => {
+      const event = session({ payment_status: 'paid' });
+      await service.handleEvent({
+        ...event,
+        type: 'checkout.session.async_payment_succeeded',
+      } as Stripe.Event);
+      expect(ordersService.markAsPaid).toHaveBeenCalledWith(
+        'order-123',
+        'pi_x',
+      );
+    });
+
+    it('ne crée pas de commande pour une prod sur mesure payée', async () => {
+      await service.handleEvent(
+        session({ payment_status: 'paid', metadata: { kind: 'custom_prod' } }),
+      );
       expect(ordersService.markAsPaid).not.toHaveBeenCalled();
     });
   });

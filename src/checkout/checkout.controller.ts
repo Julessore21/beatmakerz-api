@@ -1,9 +1,17 @@
-import { Controller, Post, UseGuards, Options, HttpCode } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Post,
+  UseGuards,
+  Options,
+  HttpCode,
+} from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import { CheckoutService } from './checkout.service';
 import { JwtAccessGuard } from '../common/guards/jwt-access.guard';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import type { RequestUser } from '../common/decorators/current-user.decorator';
+import { CustomProdCheckoutDto } from './dto/custom-prod.dto';
 
 @ApiTags('checkout')
 @Controller('checkout')
@@ -20,5 +28,11 @@ export class CheckoutController {
   @UseGuards(JwtAccessGuard)
   createSession(@CurrentUser() user: RequestUser) {
     return this.checkoutService.createSession(user.userId);
+  }
+
+  @Post('custom-prod')
+  createCustomProdSession(@Body() dto: CustomProdCheckoutDto) {
+    const { email, ...brief } = dto;
+    return this.checkoutService.createCustomProdSession(brief, email);
   }
 }
