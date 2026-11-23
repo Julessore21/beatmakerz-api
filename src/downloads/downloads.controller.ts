@@ -10,6 +10,8 @@ import {
 import { JwtService } from '@nestjs/jwt';
 import { ApiExcludeController } from '@nestjs/swagger';
 import type { Response } from 'express';
+import { FilesService } from '../files/files.service';
+import { isR2Key } from '../files/storage-keys';
 
 export interface DownloadTokenPayload {
   sub: 'download';
@@ -24,7 +26,10 @@ export interface DownloadTokenPayload {
 export class DownloadsController {
   private readonly logger = new Logger(DownloadsController.name);
 
-  constructor(private readonly jwtService: JwtService) {}
+  constructor(
+    private readonly jwtService: JwtService,
+    private readonly filesService: FilesService,
+  ) {}
 
   @Get('signed/:token')
   async serveSignedDownload(
@@ -49,6 +54,20 @@ export class DownloadsController {
       `Download request — orderItem: ${payload.orderItemId}, user: ${payload.userId}, type: ${payload.assetType}`,
     );
 
+    const filename = `beat-${payload.orderItemId}.${payload.assetType}`;
+
+    // R2 : adresse signée valable 5 minutes, qui force le téléchargement.
+    if (isR2Key(payload.storageKey)) {
+      const url = await this.filesService.signedUrl(payload.storageKey, {
+        expiresIn: 300,
+        downloadName: filename,
+      });
+      res.setHeader('Cache-Control', 'no-store');
+      res.redirect(302, url);
+      return;
+    }
+
+    // Ancien fichier FileUp, pas encore recopié dans R2.
     let fileupRes: globalThis.Response;
     try {
       fileupRes = await fetch(payload.storageKey);
@@ -72,8 +91,6 @@ export class DownloadsController {
 
     const contentType =
       fileupRes.headers.get('content-type') ?? 'application/octet-stream';
-    const filename = `beat-${payload.orderItemId}.${payload.assetType}`;
-
     res.setHeader('Content-Type', contentType);
     res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
     res.setHeader('Cache-Control', 'no-store');

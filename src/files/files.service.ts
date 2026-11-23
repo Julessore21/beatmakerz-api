@@ -1,113 +1,165 @@
-import { Injectable, InternalServerErrorException, Logger } from '@nestjs/common';
+import {
+  Injectable,
+  InternalServerErrorException,
+  Logger,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-
-interface FileUpResponse {
-  status: string;
-  file: {
-    id: string;
-    fileName: string;
-    fileSize: number;
-    mimeType: string;
-    expireIn: string;
-    directDownload: boolean;
-  };
-  downloadLink: string;
-  viewLink: string;
-}
+import {
+  GetObjectCommand,
+  HeadBucketCommand,
+  PutObjectCommand,
+  S3Client,
+} from '@aws-sdk/client-s3';
+import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
+import { randomBytes } from 'crypto';
+import {
+  isPublicKey,
+  isR2Key,
+  keyOf,
+  objectKey,
+  R2_PREFIX,
+} from './storage-keys';
 
 interface UploadOptions {
   file: Express.Multer.File;
   filename?: string;
 }
 
+export interface UploadResult {
+  /** Référence stockée en base (`r2:<clé>`), jamais une URL publique. */
+  storageKey: string;
+  /** Adresse publique, seulement pour une pochette (servie par /files/public). */
+  publicUrl?: string;
+  /** Anciens noms gardés pour l'admin : downloadLink = storageKey. */
+  downloadLink: string;
+  viewLink: string;
+}
+
+/**
+ * Stockage des fichiers dans Cloudflare R2 (API compatible S3), bucket privé.
+ * Les fichiers achetés ne sont jamais publics : chaque téléchargement reçoit
+ * une adresse signée qui expire. Seules les pochettes (covers/…) sont servies
+ * à tout le monde, par une redirection signée.
+ * Les anciennes adresses FileUp (http…) restent lisibles tant qu'elles
+ * n'ont pas été recopiées (scripts/migrate-to-r2.js).
+ */
 @Injectable()
 export class FilesService {
   private readonly logger = new Logger(FilesService.name);
-  private readonly apiKey: string;
-  private readonly uploadEndpoint = 'https://file-up.fr/api/sharex/upload?directDownload=1';
+  private readonly client: S3Client | null;
+  private readonly bucket: string;
+  private readonly publicBase: string;
 
   constructor(private readonly configService: ConfigService) {
-    this.apiKey = this.configService.getOrThrow<string>('fileup.apiKey');
+    const r2 =
+      this.configService.get<{
+        accountId?: string;
+        accessKeyId?: string;
+        secretAccessKey?: string;
+        bucket?: string;
+      }>('r2') ?? {};
+    this.bucket = r2.bucket ?? '';
+    this.publicBase = (
+      this.configService.get<string>('publicApiUrl') ?? ''
+    ).replace(/\/$/, '');
+    this.client =
+      r2.accountId && r2.accessKeyId && r2.secretAccessKey && r2.bucket
+        ? new S3Client({
+            region: 'auto',
+            // R2 : pas de sommes de contrôle automatiques (réglage conseillé par Cloudflare).
+            requestChecksumCalculation: 'WHEN_REQUIRED',
+            responseChecksumValidation: 'WHEN_REQUIRED',
+            endpoint: `https://${r2.accountId}.r2.cloudflarestorage.com`,
+            credentials: {
+              accessKeyId: r2.accessKeyId,
+              secretAccessKey: r2.secretAccessKey,
+            },
+          })
+        : null;
+    if (!this.client) {
+      this.logger.warn('R2 non configuré : aucun envoi de fichier possible.');
+    }
   }
 
-  /**
-   * Upload un fichier vers FileUp
-   * @param options - Fichier et nom optionnel
-   * @returns { downloadLink, viewLink } — downloadLink force le téléchargement, viewLink sert en inline (streaming audio, affichage image)
-   */
-  async uploadFile({ file, filename }: UploadOptions): Promise<{ downloadLink: string; viewLink: string }> {
+  private s3(): S3Client {
+    if (!this.client) {
+      throw new InternalServerErrorException('File storage is not configured');
+    }
+    return this.client;
+  }
+
+  /** Envoie un fichier dans R2 et rend sa référence. */
+  async uploadFile({ file, filename }: UploadOptions): Promise<UploadResult> {
+    const key = objectKey(
+      filename || file.originalname,
+      randomBytes(4).toString('hex'),
+    );
     try {
-      // Créer FormData
-      const formData = new FormData();
-
-      // Create Blob from buffer (type cast for Node.js compatibility)
-      const blob = new Blob([file.buffer as BlobPart], { type: file.mimetype });
-      formData.append('file', blob, filename || file.originalname);
-      formData.append('expiry', 'null');
-
-      // Upload vers FileUp
-      const response = await fetch(this.uploadEndpoint, {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${this.apiKey}`,
-        },
-        body: formData,
-      });
-
-      if (!response.ok) {
-        const error = await response.text().catch(() => 'Unknown error');
-        throw new Error(`FileUp upload failed: ${response.status} - ${error}`);
-      }
-
-      const data: FileUpResponse = await response.json();
-
-      this.logger.log(`FileUp response: ${JSON.stringify(data)}`);
-
-      if (!data.downloadLink) {
-        throw new Error('FileUp response missing downloadLink');
-      }
-
-      return {
-        downloadLink: data.downloadLink,
-        viewLink: data.viewLink || data.downloadLink,
-      };
+      await this.s3().send(
+        new PutObjectCommand({
+          Bucket: this.bucket,
+          Key: key,
+          Body: file.buffer,
+          ContentType: file.mimetype || 'application/octet-stream',
+        }),
+      );
     } catch (error) {
       throw new InternalServerErrorException(
         `File upload failed: ${(error as Error).message}`,
       );
     }
+    const storageKey = `${R2_PREFIX}${key}`;
+    const publicUrl = isPublicKey(key) ? this.publicUrlOf(key) : undefined;
+    return {
+      storageKey,
+      publicUrl,
+      downloadLink: storageKey,
+      viewLink: publicUrl ?? storageKey,
+    };
+  }
+
+  /** Adresse publique d'une pochette : l'API redirige vers une URL signée. */
+  publicUrlOf(key: string): string {
+    return `${this.publicBase}/files/public/${key.split('/').map(encodeURIComponent).join('/')}`;
   }
 
   /**
-   * Convertit un lien dashboard FileUp en lien de téléchargement direct
-   * https://file-up.fr/dashboard/view/<id>  →  https://file-up.fr/<id>
+   * Adresse temporaire pour lire ou télécharger un fichier.
+   * Une ancienne adresse FileUp est rendue telle quelle (legacy).
    */
-  private toDirectLink(url: string): string {
-    return url.replace('/dashboard/view/', '/');
+  async signedUrl(
+    storageKey: string,
+    options: {
+      expiresIn?: number;
+      downloadName?: string;
+      contentType?: string;
+    } = {},
+  ): Promise<string> {
+    if (!isR2Key(storageKey)) return storageKey;
+    return getSignedUrl(
+      this.s3(),
+      new GetObjectCommand({
+        Bucket: this.bucket,
+        Key: keyOf(storageKey),
+        ResponseContentDisposition: options.downloadName
+          ? `attachment; filename="${options.downloadName.replace(/["\\\r\n]/g, '')}"`
+          : undefined,
+        ResponseContentType: options.contentType,
+      }),
+      { expiresIn: options.expiresIn ?? 300 },
+    );
   }
 
-  /**
-   * Health check pour vérifier si FileUp est disponible
-   */
-  async checkHealth(): Promise<{ status: 'healthy' | 'degraded'; responseTime?: number }> {
+  async checkHealth(): Promise<{
+    status: 'healthy' | 'degraded';
+    responseTime?: number;
+  }> {
+    if (!this.client) return { status: 'degraded' };
     const start = Date.now();
     try {
-      const response = await fetch(this.uploadEndpoint, {
-        method: 'OPTIONS',
-        headers: {
-          Authorization: `Bearer ${this.apiKey}`,
-        },
-        signal: AbortSignal.timeout(5000),
-      });
-
-      const responseTime = Date.now() - start;
-
-      if (response.ok) {
-        return { status: 'healthy', responseTime };
-      }
-
-      return { status: 'degraded', responseTime };
-    } catch (error) {
+      await this.client.send(new HeadBucketCommand({ Bucket: this.bucket }));
+      return { status: 'healthy', responseTime: Date.now() - start };
+    } catch {
       return { status: 'degraded' };
     }
   }

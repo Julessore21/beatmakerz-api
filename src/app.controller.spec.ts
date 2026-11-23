@@ -15,7 +15,7 @@ describe("AppController", () => {
             healthCheck: jest.fn().mockResolvedValue({
               status: 'ok',
               db: 'ok',
-              fileup: { status: 'healthy' },
+              storage: { status: 'healthy' },
             }),
           },
         },

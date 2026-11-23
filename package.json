@@ -20,6 +20,8 @@
     "test:e2e": "jest --config ./test/jest-e2e.json"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.1175.0",
+    "@aws-sdk/s3-request-presigner": "^3.1175.0",
     "@nestjs/cli": "^11.0.0",
     "@nestjs/common": "^11.0.1",
     "@nestjs/config": "^4.0.2",
@@ -31,6 +33,9 @@
     "@nestjs/swagger": "^11.2.0",
     "@nestjs/terminus": "^11.0.0",
     "@nestjs/throttler": "^6.4.0",
+    "@types/express": "^5.0.0",
+    "@types/multer": "^2.0.0",
+    "@types/node": "^22.10.7",
     "argon2": "^0.44.0",
     "axios": "^1.12.2",
     "class-transformer": "^0.5.1",
@@ -52,10 +57,7 @@
     "stripe": "^19.1.0",
     "swagger-ui-express": "^5.0.1",
     "typescript": "^5.7.3",
-    "uuid": "^13.0.0",
-    "@types/express": "^5.0.0",
-    "@types/multer": "^2.0.0",
-    "@types/node": "^22.10.7"
+    "uuid": "^13.0.0"
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3.2.0",

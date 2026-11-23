@@ -2,10 +2,12 @@ import { Module } from '@nestjs/common';
 import { JwtModule } from '@nestjs/jwt';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { DownloadsController } from './downloads.controller';
+import { FilesModule } from '../files/files.module';
 
 @Module({
   imports: [
     ConfigModule,
+    FilesModule,
     JwtModule.registerAsync({
       imports: [ConfigModule],
       inject: [ConfigService],

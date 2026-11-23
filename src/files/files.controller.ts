@@ -25,7 +25,7 @@ export class FilesController {
   constructor(private readonly filesService: FilesService) {}
 
   /**
-   * Upload un fichier vers FileUp
+   * Upload un fichier dans R2
    * Remplace le système de presigned URLs S3
    */
   @Post('upload')
@@ -56,7 +56,7 @@ export class FilesController {
     // Construire le nom du fichier final
     const filename = this.buildFilename(file, dto);
 
-    // Upload vers FileUp
+    // Envoi dans R2
     const { downloadLink, viewLink } = await this.filesService.uploadFile({
       file,
       filename,

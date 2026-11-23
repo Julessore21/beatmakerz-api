@@ -237,7 +237,7 @@ export class BeatsService {
   }
 
   /**
-   * Upload cover image pour un beat via FileUp
+   * Upload cover image pour un beat dans R2
    */
   async uploadCover(id: string, file: Express.Multer.File) {
     const beat = await this.beatModel.findById(id);
@@ -245,7 +245,7 @@ export class BeatsService {
       throw new NotFoundException('Beat not found');
     }
 
-    // Upload vers FileUp — on utilise viewLink pour affichage inline dans <img>
+    // Envoi dans R2 — viewLink = adresse publique de la pochette (/files/public/…)
     const { viewLink } = await this.filesService.uploadFile({
       file,
       filename: `beats/${id}/cover.${file.originalname.split('.').pop()}`,
@@ -259,7 +259,7 @@ export class BeatsService {
   }
 
   /**
-   * Upload un asset (preview, mp3, wav, stems) pour un beat via FileUp
+   * Upload un asset (preview, mp3, wav, stems) pour un beat dans R2
    */
   async uploadAsset(
     id: string,
@@ -272,7 +272,7 @@ export class BeatsService {
       throw new NotFoundException('Beat not found');
     }
 
-    // Upload vers FileUp — downloadLink uniquement (lien direct vers le fichier binaire)
+    // Envoi dans R2 — downloadLink = référence privée r2:<clé>
     // Le streaming audio est géré par le proxy /beats/:id/stream/preview
     const links = await this.filesService.uploadFile({
       file,
@@ -327,7 +327,7 @@ export class BeatsService {
     );
     this.logger.log(`Audio info: duration=${audioInfo.durationSec}s, format=${audioInfo.format}`);
 
-    // 2. Upload full track to FileUp — downloadLink pour forcer le téléchargement lors des achats
+    // 2. Upload full track to R2 (privé) — servi aux acheteurs par une adresse signée
     const mp3Links = await this.filesService.uploadFile({
       file,
       filename: `beats/${id}/mp3/${file.originalname}`,
@@ -383,7 +383,7 @@ export class BeatsService {
         size: previewResult.buffer.length,
       } as Express.Multer.File;
 
-      // Upload preview to FileUp — on force l'extension .mp3 pour que FileUp détecte audio/mpeg
+      // Upload preview to R2 — extension .mp3 forcée
       // On stocke le downloadLink (URL directe vers le fichier binaire)
       // Le streaming est proxifié par /beats/:id/stream/preview
       const previewBasename = file.originalname.replace(/\.[^/.]+$/, '');

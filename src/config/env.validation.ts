@@ -36,7 +36,20 @@ class EnvironmentVariables {
   STRIPE_WEBHOOK_SECRET!: string;
 
   @IsString()
-  FILEUP_API_KEY!: string;
+  R2_ACCOUNT_ID!: string;
+
+  @IsString()
+  R2_ACCESS_KEY_ID!: string;
+
+  @IsString()
+  R2_SECRET_ACCESS_KEY!: string;
+
+  @IsString()
+  R2_BUCKET!: string;
+
+  /** Adresse publique de cette API (pochettes servies par /files/public/…). */
+  @IsString()
+  PUBLIC_API_URL!: string;
 
   @IsString()
   EMAIL_API_KEY!: string;
