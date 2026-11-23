@@ -18,7 +18,9 @@ if (!process.env.MONGO_URI || !email) {
   const client = new MongoClient(process.env.MONGO_URI);
   await client.connect();
   const users = client.db().collection('users');
-  const res = await users.updateOne({ email }, { $set: { role: 'admin' } });
+  // Adresse comparée sans tenir compte des majuscules (le schéma ne les retire pas).
+  const exact = new RegExp(`^${email.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i');
+  const res = await users.updateOne({ email: exact }, { $set: { role: 'admin' } });
   console.log(
     res.matchedCount
       ? `${email} est administrateur. Reconnecte-toi sur le site pour que ce soit pris en compte.`
