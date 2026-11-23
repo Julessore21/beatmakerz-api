@@ -60,3 +60,13 @@ PUBLIC_API_URL=https://… node scripts/migrate-to-r2.js
 ```
 
 Un fichier introuvable sur FileUp reste tel quel en base et est listé : il faudra le renvoyer depuis l'admin.
+
+## 6. Le compte administrateur (base neuve)
+
+Crée ton compte normalement sur le site, puis, dans le Terminal :
+
+```bash
+MONGO_URI=… node scripts/make-admin.js ton@adresse.fr
+```
+
+Reconnecte-toi : l'admin (`/admin/catalogue`) est ouvert, on peut y ajouter les prods.
