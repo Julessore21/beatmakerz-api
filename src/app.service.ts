@@ -12,11 +12,11 @@ export class AppService {
 
   async healthCheck() {
     const db = await this.checkDatabase();
-    const fileup = await this.checkFileUp();
+    const storage = await this.filesService.checkHealth();
     return {
-      status: db === 'ok' && fileup.status === 'healthy' ? 'ok' : 'degraded',
+      status: db === 'ok' && storage.status === 'healthy' ? 'ok' : 'degraded',
       db,
-      fileup,
+      storage,
     };
   }
 
@@ -27,9 +27,5 @@ export class AppService {
     } catch (error) {
       return 'error';
     }
-  }
-
-  private async checkFileUp() {
-    return this.filesService.checkHealth();
   }
 }

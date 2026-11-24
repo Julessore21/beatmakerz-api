@@ -19,6 +19,8 @@ import { Readable } from 'stream';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { ApiTags, ApiConsumes, ApiBody } from '@nestjs/swagger';
 import { BeatsService } from './beats.service';
+import { FilesService } from '../files/files.service';
+import { isR2Key } from '../files/storage-keys';
 import { ListBeatsDto } from './dto/list-beats.dto';
 import { CreateBeatDto } from './dto/create-beat.dto';
 import { UpdateBeatDto } from './dto/update-beat.dto';
@@ -31,7 +33,10 @@ import { UserRoleEnum } from '../database/schemas/user.schema';
 @ApiTags('beats')
 @Controller('beats')
 export class BeatsController {
-  constructor(private readonly beatsService: BeatsService) {}
+  constructor(
+    private readonly beatsService: BeatsService,
+    private readonly filesService: FilesService,
+  ) {}
 
   /**
    * Liste publique des beats (pas d'auth requise)
@@ -63,6 +68,17 @@ export class BeatsController {
   ) {
     try {
       const fileUrl = await this.beatsService.getPreviewStorageKey(id);
+
+      // R2 : redirection vers une adresse signée (le lecteur suit la redirection
+      // et R2 gère lui-même les requêtes Range), sans faire passer l'audio par l'API.
+      if (isR2Key(fileUrl)) {
+        const url = await this.filesService.signedUrl(fileUrl, {
+          expiresIn: 3600,
+          contentType: 'audio/mpeg',
+        });
+        res.setHeader('Cache-Control', 'private, max-age=600');
+        return res.redirect(302, url);
+      }
 
       const rangeHeader = req.headers['range'] as string | undefined;
       const fetchHeaders: Record<string, string> = {};

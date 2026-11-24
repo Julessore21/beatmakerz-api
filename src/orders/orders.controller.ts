@@ -33,6 +33,11 @@ import {
   AssetTypeEnum,
 } from '../database/schemas/asset.schema';
 import { DownloadTokenPayload } from '../downloads/downloads.controller';
+import {
+  LicenseType,
+  LicenseTypeDocument,
+} from '../database/schemas/license-type.schema';
+import { LICENSE_RULES } from '../licenses/license-rules';
 
 const DOWNLOAD_TTL_SECONDS = 900; // 15 minutes
 
@@ -48,6 +53,8 @@ export class OrdersController {
     @InjectModel(OrderItem.name)
     private readonly orderItemModel: Model<OrderItemDocument>,
     @InjectModel(Asset.name) private readonly assetModel: Model<AssetDocument>,
+    @InjectModel(LicenseType.name)
+    private readonly licenseTypeModel: Model<LicenseTypeDocument>,
   ) {}
 
   @Get()
@@ -94,6 +101,14 @@ export class OrdersController {
       .findOne({ _id: itemId, orderId })
       .lean();
     if (!item) throw new NotFoundException('Order item not found');
+
+    // Seulement les fichiers que la licence achetée donne (une Basic n'ouvre jamais les pistes).
+    const license = await this.licenseTypeModel
+      .findById(item.licenseTypeId)
+      .lean();
+    if (!license || !LICENSE_RULES[license.code]?.files.includes(assetType)) {
+      throw new ForbiddenException('This file is not included in your license');
+    }
 
     const asset = await this.assetModel
       .findOne({ beatId: item.beatId, type: assetType })

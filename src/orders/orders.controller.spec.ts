@@ -7,6 +7,7 @@ import { getModelToken } from "@nestjs/mongoose";
 import { Order } from "../database/schemas/order.schema";
 import { OrderItem } from "../database/schemas/order-item.schema";
 import { Asset } from "../database/schemas/asset.schema";
+import { LicenseType } from "../database/schemas/license-type.schema";
 
 const requestUser = { userId: 'user-1', email: 'test@example.com', role: 'buyer' };
 
@@ -40,6 +41,7 @@ describe('OrdersController — GET /me/orders/:id', () => {
         { provide: getModelToken(Order.name), useValue: { findById: jest.fn() } },
         { provide: getModelToken(OrderItem.name), useValue: { findOne: jest.fn() } },
         { provide: getModelToken(Asset.name), useValue: { findOne: jest.fn() } },
+        { provide: getModelToken(LicenseType.name), useValue: { findById: jest.fn() } },
       ],
     }).compile();
 

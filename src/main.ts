@@ -21,11 +21,17 @@ async function bootstrap() {
   const nodeEnv = configService.get<string>('NODE_ENV') || process.env.NODE_ENV;
   const isProduction = nodeEnv === 'production';
 
+  // FRONTEND_URL peut lister plusieurs adresses du site, séparées par des virgules
+  // (ex. l'adresse Cloudflare et le domaine). Chacune est acceptée avec et sans www.
+  const frontends = (configService.get<string>('frontendUrls') ?? frontendUrl ?? '')
+    .split(',')
+    .map((u) => u.trim().replace(/\/$/, ''))
+    .filter(Boolean);
   const allowedOrigins = [
-    frontendUrl,
-    frontendUrl?.includes('://www.')
-      ? frontendUrl.replace('://www.', '://')
-      : frontendUrl?.replace('://', '://www.'),
+    ...frontends.flatMap((u) => [
+      u,
+      u.includes('://www.') ? u.replace('://www.', '://') : u.replace('://', '://www.'),
+    ]),
     'https://beatmakerz.vercel.app',
     'https://www.beatmakerz.fr',
     'https://beatmakerz.fr',

@@ -153,6 +153,40 @@ export class CheckoutService {
     return { url: session.url, orderId: order._id };
   }
 
+  private customPrice: {
+    at: number;
+    value: { priceCents: number | null; currency: string };
+  } | null = null;
+
+  /** Prix de la prod sur mesure tel que Stripe le facturera (gardé 10 minutes). */
+  async customProdPrice(): Promise<{
+    priceCents: number | null;
+    currency: string;
+  }> {
+    if (this.customPrice && Date.now() - this.customPrice.at < 600_000)
+      return this.customPrice.value;
+    const priceId = this.configService.get<string>('stripe.customProdPriceId');
+    let value: { priceCents: number | null; currency: string } = {
+      priceCents: null,
+      currency: 'EUR',
+    };
+    if (priceId) {
+      try {
+        const price = await this.stripeService
+          .getClient()
+          .prices.retrieve(priceId);
+        value = {
+          priceCents: price.unit_amount ?? null,
+          currency: (price.currency || 'eur').toUpperCase(),
+        };
+      } catch {
+        // Stripe injoignable : le site n'affiche pas de prix plutôt qu'un prix faux.
+      }
+    }
+    this.customPrice = { at: Date.now(), value };
+    return value;
+  }
+
   /**
    * Paiement unique pour une prod sur mesure. Le prix vient de la config serveur
    * (jamais du client) et le brief voyage dans les metadata Stripe : c'est là

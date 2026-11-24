@@ -23,6 +23,7 @@ import { FilesModule } from "./files/files.module";
 import { PaymentsModule } from "./payments/payments.module";
 import { DownloadsModule } from "./downloads/downloads.module";
 import { ContactModule } from "./contact/contact.module";
+import { LicensesModule } from "./licenses/licenses.module";
 
 @Module({
   imports: [
@@ -66,6 +67,7 @@ import { ContactModule } from "./contact/contact.module";
     PaymentsModule,
     DownloadsModule,
     ContactModule,
+    LicensesModule,
   ],
   controllers: [AppController],
   providers: [

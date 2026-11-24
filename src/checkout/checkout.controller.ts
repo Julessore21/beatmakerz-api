@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Get,
   Post,
   UseGuards,
   Options,
@@ -28,6 +29,12 @@ export class CheckoutController {
   @UseGuards(JwtAccessGuard)
   createSession(@CurrentUser() user: RequestUser) {
     return this.checkoutService.createSession(user.userId);
+  }
+
+  /** Prix de la prod sur mesure, lu dans Stripe : le site affiche le prix réellement facturé. */
+  @Get('custom-prod')
+  customProdPrice() {
+    return this.checkoutService.customProdPrice();
   }
 
   @Post('custom-prod')

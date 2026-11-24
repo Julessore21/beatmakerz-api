@@ -34,6 +34,14 @@ describe('OrdersService', () => {
     const licenseModel = {
       find: jest.fn(() => chain([{ _id: 'l1', code: 'Basic' }])),
     };
+    const assetModel = {
+      find: jest.fn(() =>
+        chain([
+          { beatId: 'b1', type: 'mp3' },
+          { beatId: 'b1', type: 'stems' },
+        ]),
+      ),
+    };
     const service = new OrdersService(
       orderModel as never,
       orderItemModel as never,
@@ -41,6 +49,7 @@ describe('OrdersService', () => {
       cartItemModel as never,
       beatModel as never,
       licenseModel as never,
+      assetModel as never,
     );
     return { service, orderModel, cartItemModel };
   };
@@ -57,6 +66,8 @@ describe('OrdersService', () => {
       beat: { title: 'Space Wave' },
       license: { code: 'Basic' },
       downloadable: true,
+      // Basic : le MP3 (le WAV n'existe pas ici), jamais les pistes.
+      files: ['mp3'],
     });
   });
 
