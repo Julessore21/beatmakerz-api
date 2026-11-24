@@ -7,6 +7,7 @@ import { OrdersService } from './orders.service';
 import { Order } from '../database/schemas/order.schema';
 import { OrderItem } from '../database/schemas/order-item.schema';
 import { Asset, AssetTypeEnum } from '../database/schemas/asset.schema';
+import { LicenseType } from '../database/schemas/license-type.schema';
 
 const CURRENT_USER = { userId: 'user-abc', role: 'buyer' };
 
@@ -51,12 +52,14 @@ describe('OrdersController — download endpoint', () => {
   let orderModel: ReturnType<typeof makeMockModel>;
   let orderItemModel: ReturnType<typeof makeMockModel>;
   let assetModel: ReturnType<typeof makeMockModel>;
+  let licenseModel: ReturnType<typeof makeMockModel>;
   let jwtService: jest.Mocked<JwtService>;
 
   beforeEach(async () => {
     orderModel = makeMockModel(makeOrder());
     orderItemModel = makeMockModel(makeOrderItem());
     assetModel = makeMockModel(makeAsset());
+    licenseModel = makeMockModel({ _id: 'lic-001', code: 'Basic' });
 
     jwtService = {
       sign: jest.fn().mockReturnValue('signed-download-token'),
@@ -74,6 +77,7 @@ describe('OrdersController — download endpoint', () => {
         { provide: getModelToken(Order.name), useValue: orderModel },
         { provide: getModelToken(OrderItem.name), useValue: orderItemModel },
         { provide: getModelToken(Asset.name), useValue: assetModel },
+        { provide: getModelToken(LicenseType.name), useValue: licenseModel },
       ],
     }).compile();
 
@@ -157,6 +161,13 @@ describe('OrdersController — download endpoint', () => {
         AssetTypeEnum.wav,
       ),
     ).rejects.toThrow(NotFoundException);
+  });
+
+  it('throws 403 when the file is not included in the license (Basic never opens the stems)', async () => {
+    await expect(
+      controller.getDownloadUrl(CURRENT_USER as never, 'order-123', 'item-456', AssetTypeEnum.stems),
+    ).rejects.toThrow(ForbiddenException);
+    expect(jwtService.sign).not.toHaveBeenCalled();
   });
 
   it('expiresAt is approximately 15 minutes from now', async () => {

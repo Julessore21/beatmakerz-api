@@ -33,6 +33,7 @@ Aucune clé ne va dans le code : tout se colle dans les réglages de chaque serv
 | `STRIPE_KEY`, `STRIPE_PRICE_CUSTOM_PROD` | depuis le tableau de bord Stripe |
 | `STRIPE_WEBHOOK_SECRET` | voir étape 4 |
 | `EMAIL_API_KEY` | la même qu'avant |
+| `LICENSE_BASIC_CENTS` | prix de la licence d'une prod, en centimes (`999` = 9,99 €, la valeur par défaut) |
 | `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY` | étape 2 |
 | `R2_BUCKET` | `beatmakerz` |
 | `PUBLIC_API_URL` | l'adresse donnée par Cloud Run, ex. `https://beatmakerz-api-xxxx.europe-west1.run.app` |
@@ -69,4 +70,4 @@ Crée ton compte normalement sur le site, puis, dans le Terminal :
 MONGO_URI=… node scripts/make-admin.js ton@adresse.fr
 ```
 
-Reconnecte-toi : l'admin (`/admin/catalogue`) est ouvert, on peut y ajouter les prods.
+Reconnecte-toi : le profil d’artiste « Beatmakerz » est créé et l’admin (`/admin/catalogue`) est ouvert, on peut y ajouter les prods.

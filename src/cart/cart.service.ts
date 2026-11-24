@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { AddCartItemDto } from './dto/add-cart-item.dto';
@@ -8,6 +8,8 @@ import { CartItem, CartItemDocument } from '../database/schemas/cart-item.schema
 import { Beat, BeatDocument, BeatStatusEnum } from '../database/schemas/beat.schema';
 import { LicenseType, LicenseTypeDocument } from '../database/schemas/license-type.schema';
 import { PriceOverride, PriceOverrideDocument } from '../database/schemas/price-override.schema';
+import { Asset, AssetDocument } from '../database/schemas/asset.schema';
+import { LICENSE_RULES } from '../licenses/license-rules';
 
 @Injectable()
 export class CartService {
@@ -17,6 +19,7 @@ export class CartService {
     @InjectModel(Beat.name) private readonly beatModel: Model<BeatDocument>,
     @InjectModel(LicenseType.name) private readonly licenseTypeModel: Model<LicenseTypeDocument>,
     @InjectModel(PriceOverride.name) private readonly priceOverrideModel: Model<PriceOverrideDocument>,
+    @InjectModel(Asset.name) private readonly assetModel: Model<AssetDocument>,
   ) {}
 
   async getCart(userId: string) {
@@ -58,6 +61,11 @@ export class CartService {
     }
     if (!licenseType) {
       throw new NotFoundException('License not found');
+    }
+    // Jamais vendre une licence dont le fichier requis n'existe pas pour cette prod.
+    const required = LICENSE_RULES[licenseType.code]?.requires;
+    if (!required || !(await this.assetModel.exists({ beatId: dto.beatId, type: required }))) {
+      throw new BadRequestException('License not available for this beat');
     }
 
     const cart = await this.cartModel

@@ -24,6 +24,8 @@ import {
   LicenseType,
   LicenseTypeDocument,
 } from '../database/schemas/license-type.schema';
+import { Asset, AssetDocument } from '../database/schemas/asset.schema';
+import { filesFor, SELLABLE_FORMATS } from '../licenses/license-rules';
 
 @Injectable()
 export class OrdersService {
@@ -37,6 +39,7 @@ export class OrdersService {
     @InjectModel(Beat.name) private readonly beatModel: Model<BeatDocument>,
     @InjectModel(LicenseType.name)
     private readonly licenseTypeModel: Model<LicenseTypeDocument>,
+    @InjectModel(Asset.name) private readonly assetModel: Model<AssetDocument>,
   ) {}
 
   /**
@@ -55,10 +58,11 @@ export class OrdersService {
       .find({ orderId: { $in: orders.map((o) => o._id) } })
       .lean();
 
-    const [beats, licenses] = await Promise.all([
+    const beatIds = [...new Set(items.map((it) => it.beatId))];
+    const [beats, licenses, files] = await Promise.all([
       this.beatModel
-        .find({ _id: { $in: [...new Set(items.map((it) => it.beatId))] } })
-        .select({ title: 1, coverUrl: 1 })
+        .find({ _id: { $in: beatIds } })
+        .select({ title: 1, coverUrl: 1, bpm: 1, key: 1 })
         .lean(),
       this.licenseTypeModel
         .find({
@@ -66,7 +70,13 @@ export class OrdersService {
         })
         .select({ code: 1 })
         .lean(),
+      this.assetModel
+        .find({ beatId: { $in: beatIds }, type: { $in: SELLABLE_FORMATS } })
+        .select({ beatId: 1, type: 1 })
+        .lean(),
     ]);
+    const formatsOf = (beatId: string) =>
+      files.filter((f) => f.beatId === beatId).map((f) => f.type);
     const beatMap = new Map(beats.map((b) => [String(b._id), b]));
     const licenseMap = new Map(licenses.map((l) => [String(l._id), l]));
 
@@ -79,6 +89,11 @@ export class OrdersService {
           beat: beatMap.get(it.beatId) ?? null,
           license: licenseMap.get(it.licenseTypeId) ?? null,
           downloadable: o.status === OrderStatusEnum.paid,
+          // Les fichiers que la licence donne et qui existent : ce que le compte propose de télécharger.
+          files: filesFor(
+            licenseMap.get(it.licenseTypeId)?.code,
+            formatsOf(it.beatId),
+          ),
         })),
     }));
   }

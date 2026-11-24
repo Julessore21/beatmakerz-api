@@ -7,6 +7,7 @@ import { CartItem, CartItemSchema } from '../database/schemas/cart-item.schema';
 import { Beat, BeatSchema } from '../database/schemas/beat.schema';
 import { LicenseType, LicenseTypeSchema } from '../database/schemas/license-type.schema';
 import { PriceOverride, PriceOverrideSchema } from '../database/schemas/price-override.schema';
+import { Asset, AssetSchema } from '../database/schemas/asset.schema';
 
 @Module({
   imports: [
@@ -16,6 +17,7 @@ import { PriceOverride, PriceOverrideSchema } from '../database/schemas/price-ov
       { name: Beat.name, schema: BeatSchema },
       { name: LicenseType.name, schema: LicenseTypeSchema },
       { name: PriceOverride.name, schema: PriceOverrideSchema },
+      { name: Asset.name, schema: AssetSchema },
     ]),
   ],
   controllers: [CartController],

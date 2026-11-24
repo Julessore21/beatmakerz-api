@@ -10,6 +10,7 @@ import { Asset, AssetDocument, AssetTypeEnum } from '../database/schemas/asset.s
 import { PriceOverride, PriceOverrideDocument } from '../database/schemas/price-override.schema';
 import { LicenseCodeEnum, LicenseType, LicenseTypeDocument } from '../database/schemas/license-type.schema';
 import { resolveLicensePrice } from '../common/utils/pricing.util';
+import { canSell, SELLABLE_FORMATS } from '../licenses/license-rules';
 import { FilesService } from '../files/files.service';
 import { AudioProcessingService } from '../audio-processing/audio-processing.service';
 
@@ -41,6 +42,43 @@ export class BeatsService {
             beatId,
           )
         : null;
+  }
+
+  /**
+   * Ce qui se vend pour chaque prod : ses formats (MP3, WAV, pistes) et le prix de chaque licence
+   * vendable (une licence dont le fichier requis manque n'est pas proposée). Même calcul que le panier.
+   */
+  private async salesResolver(beatIds: string[]) {
+    const [licenses, files] = await Promise.all([
+      this.licenseTypeModel.find().sort({ priceCents: 1 }).lean(),
+      this.assetModel
+        .find({ beatId: { $in: beatIds }, type: { $in: SELLABLE_FORMATS } })
+        .select({ beatId: 1, type: 1 })
+        .lean(),
+    ]);
+    const formats = new Map<string, AssetTypeEnum[]>();
+    for (const f of files) {
+      const key = String(f.beatId);
+      formats.set(key, [...(formats.get(key) ?? []), f.type]);
+    }
+    return (beatId: string, overrides: PriceOverride[]) => {
+      const own = SELLABLE_FORMATS.filter((t) => (formats.get(beatId) ?? []).includes(t));
+      return {
+        formats: own,
+        prices: licenses
+          .filter((l) => canSell(l.code, own))
+          .map((l) => ({
+            licenseTypeId: String(l._id),
+            code: l.code,
+            currency: l.currency,
+            priceCents: resolveLicensePrice(
+              { id: String(l._id), priceCents: l.priceCents },
+              overrides.map((o) => ({ beatId: o.beatId, licenseTypeId: o.licenseTypeId, priceCents: o.priceCents })),
+              beatId,
+            ),
+          })),
+      };
+    };
   }
 
   async listBeats(query: ListBeatsDto) {
@@ -120,10 +158,12 @@ export class BeatsService {
     }
 
     const priceOf = await this.basicPriceResolver();
+    const salesOf = await this.salesResolver(trimmed.map((b) => b._id));
     const items = trimmed.map((b) => {
       const beatOverrides = overrides.filter((o) => o.beatId === b._id);
       return {
         ...b,
+        ...salesOf(b._id, beatOverrides),
         artist: artistMap.get(b.artistId.toString()) ?? null,
         assets: previewMap.get(b._id.toString()) ?? [],
         priceOverrides: beatOverrides,
@@ -148,8 +188,10 @@ export class BeatsService {
     ]);
 
     const priceOf = await this.basicPriceResolver();
+    const salesOf = await this.salesResolver([beat._id]);
     return {
       ...beat,
+      ...salesOf(beat._id, priceOverrides),
       artist,
       assets,
       priceOverrides,
