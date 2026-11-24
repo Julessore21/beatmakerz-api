@@ -32,7 +32,7 @@ export class CartService {
     const beatIds = items.map((i) => i.beatId);
     const licenseIds = items.map((i) => i.licenseTypeId);
     const [beats, licenses] = await Promise.all([
-      this.beatModel.find({ _id: { $in: beatIds } }).select({ title: 1, coverUrl: 1, artistId: 1 }).lean(),
+      this.beatModel.find({ _id: { $in: beatIds } }).select({ title: 1, coverUrl: 1, artistId: 1, genres: 1 }).lean(),
       this.licenseTypeModel.find({ _id: { $in: licenseIds } }).lean(),
     ]);
     const beatMap = new Map(beats.map((b) => [b._id.toString(), b]));

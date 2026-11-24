@@ -62,7 +62,7 @@ export class OrdersService {
     const [beats, licenses, files] = await Promise.all([
       this.beatModel
         .find({ _id: { $in: beatIds } })
-        .select({ title: 1, coverUrl: 1, bpm: 1, key: 1 })
+        .select({ title: 1, coverUrl: 1, bpm: 1, key: 1, genres: 1 })
         .lean(),
       this.licenseTypeModel
         .find({
