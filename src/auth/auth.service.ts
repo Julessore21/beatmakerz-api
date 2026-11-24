@@ -34,7 +34,9 @@ export class AuthService {
       passwordHash,
       displayName: dto.displayName,
       avatarUrl: dto.avatarUrl,
-      role: dto.role ?? UserRoleEnum.buyer,
+      // Toujours acheteur : un rôle demandé à l'inscription est ignoré (sinon n'importe qui
+      // devenait admin). L'accès admin se donne seulement par scripts/make-admin.js.
+      role: UserRoleEnum.buyer,
     });
 
     await this.cartModel.create({ userId: user._id });
