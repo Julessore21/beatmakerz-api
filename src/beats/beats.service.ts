@@ -1,14 +1,35 @@
-import { Injectable, NotFoundException, BadRequestException, Logger } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  BadRequestException,
+  Logger,
+} from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, SortOrder } from 'mongoose';
 import { ListBeatsDto, BeatsSort } from './dto/list-beats.dto';
 import { CreateBeatDto } from './dto/create-beat.dto';
 import { UpdateBeatDto } from './dto/update-beat.dto';
-import { Beat, BeatDocument, BeatStatusEnum, BeatVisibilityEnum } from '../database/schemas/beat.schema';
+import {
+  Beat,
+  BeatDocument,
+  BeatStatusEnum,
+  BeatVisibilityEnum,
+} from '../database/schemas/beat.schema';
 import { Artist, ArtistDocument } from '../database/schemas/artist.schema';
-import { Asset, AssetDocument, AssetTypeEnum } from '../database/schemas/asset.schema';
-import { PriceOverride, PriceOverrideDocument } from '../database/schemas/price-override.schema';
-import { LicenseCodeEnum, LicenseType, LicenseTypeDocument } from '../database/schemas/license-type.schema';
+import {
+  Asset,
+  AssetDocument,
+  AssetTypeEnum,
+} from '../database/schemas/asset.schema';
+import {
+  PriceOverride,
+  PriceOverrideDocument,
+} from '../database/schemas/price-override.schema';
+import {
+  LicenseCodeEnum,
+  LicenseType,
+  LicenseTypeDocument,
+} from '../database/schemas/license-type.schema';
 import { resolveLicensePrice } from '../common/utils/pricing.util';
 import { canSell, SELLABLE_FORMATS } from '../licenses/license-rules';
 import { FilesService } from '../files/files.service';
@@ -20,10 +41,13 @@ export class BeatsService {
 
   constructor(
     @InjectModel(Beat.name) private readonly beatModel: Model<BeatDocument>,
-    @InjectModel(Artist.name) private readonly artistModel: Model<ArtistDocument>,
+    @InjectModel(Artist.name)
+    private readonly artistModel: Model<ArtistDocument>,
     @InjectModel(Asset.name) private readonly assetModel: Model<AssetDocument>,
-    @InjectModel(PriceOverride.name) private readonly priceOverrideModel: Model<PriceOverrideDocument>,
-    @InjectModel(LicenseType.name) private readonly licenseTypeModel: Model<LicenseTypeDocument>,
+    @InjectModel(PriceOverride.name)
+    private readonly priceOverrideModel: Model<PriceOverrideDocument>,
+    @InjectModel(LicenseType.name)
+    private readonly licenseTypeModel: Model<LicenseTypeDocument>,
     private readonly filesService: FilesService,
     private readonly audioProcessingService: AudioProcessingService,
   ) {}
@@ -33,12 +57,18 @@ export class BeatsService {
    * Même calcul que le panier, pour que le prix affiché soit celui facturé.
    */
   private async basicPriceResolver() {
-    const basic = await this.licenseTypeModel.findOne({ code: LicenseCodeEnum.Basic }).lean();
+    const basic = await this.licenseTypeModel
+      .findOne({ code: LicenseCodeEnum.Basic })
+      .lean();
     return (beatId: string, overrides: PriceOverride[]) =>
       basic
         ? resolveLicensePrice(
             { id: String(basic._id), priceCents: basic.priceCents },
-            overrides.map((o) => ({ beatId: o.beatId, licenseTypeId: o.licenseTypeId, priceCents: o.priceCents })),
+            overrides.map((o) => ({
+              beatId: o.beatId,
+              licenseTypeId: o.licenseTypeId,
+              priceCents: o.priceCents,
+            })),
             beatId,
           )
         : null;
@@ -62,7 +92,9 @@ export class BeatsService {
       formats.set(key, [...(formats.get(key) ?? []), f.type]);
     }
     return (beatId: string, overrides: PriceOverride[]) => {
-      const own = SELLABLE_FORMATS.filter((t) => (formats.get(beatId) ?? []).includes(t));
+      const own = SELLABLE_FORMATS.filter((t) =>
+        (formats.get(beatId) ?? []).includes(t),
+      );
       return {
         formats: own,
         prices: licenses
@@ -73,7 +105,11 @@ export class BeatsService {
             currency: l.currency,
             priceCents: resolveLicensePrice(
               { id: String(l._id), priceCents: l.priceCents },
-              overrides.map((o) => ({ beatId: o.beatId, licenseTypeId: o.licenseTypeId, priceCents: o.priceCents })),
+              overrides.map((o) => ({
+                beatId: o.beatId,
+                licenseTypeId: o.licenseTypeId,
+                priceCents: o.priceCents,
+              })),
               beatId,
             ),
           })),
@@ -99,7 +135,9 @@ export class BeatsService {
       artistIdsForSearch = artists.map((a) => a._id);
       filters.$or = [
         { title: { $regex: search, $options: 'i' } },
-        artistIdsForSearch.length ? { artistId: { $in: artistIdsForSearch } } : undefined,
+        artistIdsForSearch.length
+          ? { artistId: { $in: artistIdsForSearch } }
+          : undefined,
       ];
       filters.$or = (filters.$or as unknown[]).filter(Boolean);
     }
@@ -118,10 +156,34 @@ export class BeatsService {
       }
     }
 
+    // Page suivante : le curseur est la première prod de la page (renvoyée par la page d'avant).
+    // Ordre stable (date puis identifiant) : aucune prod sautée ni répétée d'une page à l'autre.
+    if (query.cursor) {
+      const from = await this.beatModel
+        .findById(query.cursor)
+        .select({ createdAt: 1 })
+        .lean();
+      const at = (from as { createdAt?: Date } | null)?.createdAt;
+      if (at) {
+        const page = {
+          $or: [
+            { createdAt: { $lt: at } },
+            { createdAt: at, _id: { $lte: query.cursor } },
+          ],
+        };
+        if (filters.$or) {
+          filters.$and = [{ $or: filters.$or }, page];
+          delete filters.$or;
+        } else {
+          Object.assign(filters, page);
+        }
+      }
+    }
+
     const sort: Record<string, SortOrder> =
       query.sort === BeatsSort.Popular
-        ? { createdAt: -1 } // placeholder; popularity can be derived separately
-        : { createdAt: -1 };
+        ? { createdAt: -1, _id: -1 } // placeholder; popularity can be derived separately
+        : { createdAt: -1, _id: -1 };
 
     const beats = await this.beatModel
       .find(filters)
@@ -181,7 +243,10 @@ export class BeatsService {
     }
 
     const [artist, assets, priceOverrides] = await Promise.all([
-      this.artistModel.findById(beat.artistId).select({ name: 1, verified: 1 }).lean(),
+      this.artistModel
+        .findById(beat.artistId)
+        .select({ name: 1, verified: 1 })
+        .lean(),
       // Endpoint public : seule la preview est exposée, jamais le fichier complet.
       this.assetModel.find({ beatId: id, type: AssetTypeEnum.preview }).lean(),
       this.priceOverrideModel.find({ beatId: id }).lean(),
@@ -268,7 +333,7 @@ export class BeatsService {
     const beat = await this.beatModel.findByIdAndUpdate(
       id,
       { $set: dto },
-      { new: true, runValidators: true }
+      { new: true, runValidators: true },
     );
 
     if (!beat) {
@@ -367,7 +432,9 @@ export class BeatsService {
       file.buffer,
       file.originalname,
     );
-    this.logger.log(`Audio info: duration=${audioInfo.durationSec}s, format=${audioInfo.format}`);
+    this.logger.log(
+      `Audio info: duration=${audioInfo.durationSec}s, format=${audioInfo.format}`,
+    );
 
     // 2. Upload full track to R2 (privé) — servi aux acheteurs par une adresse signée
     const mp3Links = await this.filesService.uploadFile({
@@ -405,9 +472,10 @@ export class BeatsService {
     let previewAsset: any = null;
     if (generatePreview) {
       // Si le track est plus court que la durée cible, plafonner à 50% pour ne pas livrer le son entier
-      const actualPreviewDuration = audioInfo.durationSec <= previewDurationSec
-        ? Math.floor(audioInfo.durationSec * 0.5)
-        : previewDurationSec;
+      const actualPreviewDuration =
+        audioInfo.durationSec <= previewDurationSec
+          ? Math.floor(audioInfo.durationSec * 0.5)
+          : previewDurationSec;
 
       // Generate preview using pure JS (no ffmpeg)
       const previewResult = await this.audioProcessingService.generatePreview(
@@ -415,7 +483,9 @@ export class BeatsService {
         actualPreviewDuration,
         file.originalname,
       );
-      this.logger.log(`Preview generated: ${previewResult.buffer.length} bytes`);
+      this.logger.log(
+        `Preview generated: ${previewResult.buffer.length} bytes`,
+      );
 
       // Create fake Multer file for upload
       const previewFile = {
